@@ -530,6 +530,12 @@ battle.phase = nil
 game.save.options.modOptions.quality_of_life.qol_exp_bar = "black"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
 draws, rectangles = nil, nil
+battle.wideLayout = function() return true end
+ball = nil
+battle:draw()
+T.check(ball and ball.x == 112 and ball.y == 7,
+  "wide caught indicator aligns with the fixed enemy HUD")
+battle.wideLayout = function() return false end
 
 local originalExp = playerMon.exp
 local initialPixels = classicPixels
@@ -576,7 +582,7 @@ game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
 battle:draw()
-T.eq(baseDraws, 9, "disabled overlays still call the base renderer")
+T.eq(baseDraws, 10, "disabled overlays still call the base renderer")
 T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle
