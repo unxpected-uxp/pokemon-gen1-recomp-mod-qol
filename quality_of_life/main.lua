@@ -499,8 +499,13 @@ return function(mod)
        or not enemyHudVisible(battle, slide) then return end
     local image, quad = ballAsset()
     if not image then return end
-    local hudShake = battle.fx and battle.fx.hudShakeX or 0
-    local x, y = 7 + sx + hudShake, 7 + sy
+    local x, y
+    if battle:wideLayout() then
+      x, y = 112, 7
+    else
+      local hudShake = battle.fx and battle.fx.hudShakeX or 0
+      x, y = 7 + sx + hudShake, 7 + sy
+    end
     love.graphics.setShader()
     if mode == "red" then
       love.graphics.setColor(1, 0, 0, 1)

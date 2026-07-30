@@ -429,6 +429,7 @@ local battle = {
   enemy = { mon = { species = "RATTATA" }, fainted = false },
   draw = function() baseDraws = baseDraws + 1 end,
   growInScale = function() return nil end,
+  wideLayout = function() return false end,
 }
 
 local oldDraw, oldRectangle = love.graphics.draw, love.graphics.rectangle
@@ -464,6 +465,13 @@ T.check(ball and ball.x == 9 and ball.y == 10,
   "caught indicator follows screen shake")
 T.check(ball.color[1] == 1 and ball.color[2] == 0 and ball.color[3] == 0,
   "red indicator mode draws red")
+
+battle.wideLayout = function() return true end
+ball = nil
+battle:draw()
+T.check(ball and ball.x == 112 and ball.y == 7,
+  "wide caught indicator aligns with the fixed enemy HUD")
+battle.wideLayout = function() return false end
 
 local originalExp = playerMon.exp
 local initialPixels = bar.w
@@ -510,7 +518,7 @@ game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
 battle:draw()
-T.eq(baseDraws, 8, "disabled overlays still call the base renderer")
+T.eq(baseDraws, 9, "disabled overlays still call the base renderer")
 T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle
