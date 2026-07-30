@@ -429,17 +429,21 @@ local battle = {
   enemy = { mon = { species = "RATTATA" }, fainted = false },
   draw = function() baseDraws = baseDraws + 1 end,
   growInScale = function() return nil end,
+  wideLayout = function() return false end,
 }
 
 local oldDraw, oldRectangle = love.graphics.draw, love.graphics.rectangle
-local ball, bar
-love.graphics.draw = function(_, _, x, y)
+local ball, bar, draws, rectangles
+love.graphics.draw = function(_, quad, x, y)
+  if y == nil then quad, x, y = nil, quad, x end
   local r, g, b = love.graphics.getColor()
-  ball = { x = x, y = y, color = { r, g, b } }
+  ball = { quad = quad, x = x, y = y, color = { r, g, b } }
+  if draws then draws[#draws + 1] = ball end
 end
 love.graphics.rectangle = function(mode, x, y, w, h)
   local r, g, b = love.graphics.getColor()
   bar = { mode = mode, x = x, y = y, w = w, h = h, color = { r, g, b } }
+  if rectangles then rectangles[#rectangles + 1] = bar end
 end
 
 Runtime.emit("battle.started", {
@@ -465,8 +469,70 @@ T.check(ball and ball.x == 9 and ball.y == 10,
 T.check(ball.color[1] == 1 and ball.color[2] == 0 and ball.color[3] == 0,
   "red indicator mode draws red")
 
+local classicPixels = bar.w
+battle.wideLayout = function() return true end
+battle.phase, battle.fx, draws, rectangles = "moveSelect", nil, {}, {}
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "blue"
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
+battle:draw()
+local extension, wideFill
+local glyphPixels = {}
+for _, rectangle in ipairs(rectangles) do
+  if rectangle.x == 184 and rectangle.y == 88
+      and rectangle.w == 120 and rectangle.h == 16 then
+    extension = rectangle
+  elseif rectangle.x == 208 and rectangle.y == 91 and rectangle.h == 2 then
+    wideFill = rectangle
+  elseif rectangle.w == 1 and rectangle.h == 1 then
+    glyphPixels[rectangle.x .. "," .. rectangle.y] = true
+  end
+end
+T.check(extension,
+  "wide EXP bar extends the player HUD by one row")
+T.check(wideFill and wideFill.color[1] == 56 / 255
+        and wideFill.color[2] == 144 / 255
+        and wideFill.color[3] == 240 / 255,
+  "wide EXP bar uses the configured fill color")
+local expectedGlyph = {
+  "193,90", "194,90", "196,90", "198,90", "199,90",
+  "194,91", "195,91", "198,91", "199,91",
+  "194,92", "195,92", "198,92", "199,92",
+  "193,93", "195,93", "196,93", "198,93", "199,93",
+}
+for _, pixel in ipairs(expectedGlyph) do
+  T.check(glyphPixels[pixel], "runtime XP glyph includes pixel " .. pixel)
+end
+local expTiles = {}
+for _, draw in ipairs(draws) do
+  if draw.y == 88 and draw.x and draw.x >= 200 and draw.x <= 288 then
+    expTiles[draw.x] = draw
+  end
+end
+T.check(expTiles[200] and expTiles[208] and expTiles[288],
+  "wide EXP row uses the HP bar start, segment, and end positions")
+T.check(expTiles[208].quad ~= expTiles[280].quad,
+  "wide EXP tile fill progresses from left to right")
+
+draws = {}
+require("src.render.HudTiles").drawHPBar(Data, 24, 11, {
+  hp = exports.expPixels(battle), stats = { hp = 67 },
+}, nil, true, 10)
+for x = 200, 288, 8 do
+  local hpTile
+  for _, draw in ipairs(draws) do
+    if draw.x == x and draw.y == 88 then hpTile = draw break end
+  end
+  T.check(hpTile and expTiles[x] and hpTile.quad == expTiles[x].quad,
+    "wide EXP bar uses the same HUD tile at x=" .. x)
+end
+battle.wideLayout = function() return false end
+battle.phase = nil
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "black"
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
+draws, rectangles = nil, nil
+
 local originalExp = playerMon.exp
-local initialPixels = bar.w
+local initialPixels = classicPixels
 playerMon.exp = nextLevel - 1
 battle.fx, battle.phase, bar = nil, nil, nil
 battle.frame = 1
@@ -510,7 +576,7 @@ game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
 battle:draw()
-T.eq(baseDraws, 8, "disabled overlays still call the base renderer")
+T.eq(baseDraws, 9, "disabled overlays still call the base renderer")
 T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle

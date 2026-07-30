@@ -2,9 +2,20 @@ local SCREEN_ID = "QualityOfLife"
 local DERIVED_BALL = "save/mod-derived/quality_of_life/ui/ball.png"
 
 local EXP_X, EXP_Y, EXP_WIDTH = 80, 89, 67
+local WIDE_EXP_X, WIDE_EXP_Y, WIDE_EXP_SEGMENTS = 208, 88, 10
 local EXP_LEVEL_HOLD_FRAMES = 30
 local EXP_BLUE = { 56 / 255, 144 / 255, 240 / 255, 1 }
 local EXP_BLACK = { 0, 0, 0, 1 }
+local XP_TILE_ROWS = {
+  "oooooooo", 
+  "oooooooo", 
+  "oxxoxoxx", 
+  "ooxxooxx",
+  "ooxxooxx", 
+  "oxoxxoxx", 
+  "oooooooo", 
+  "oooooooo",
+}
 local FISHING_RODS = { "SUPER_ROD", "GOOD_ROD", "OLD_ROD" }
 local DIG_TILESETS = { FOREST = true, CEMETERY = true, CAVERN = true, FACILITY = true, INTERIOR = true }
 
@@ -27,7 +38,9 @@ local MODES = {
 
 return function(mod)
   local FieldDefaults = require("src.world.FieldDefaults")
+  local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
+  local HudTiles = require("src.render.HudTiles")
   local Map = require("src.world.Map")
   local PaletteFX = require("src.render.PaletteFX")
   local Strings = require("src.core.Strings")
@@ -465,12 +478,84 @@ return function(mod)
     return state.expPixels
   end
 
+  local xpTileImage
+  local function drawXpTile(x, y)
+    local g = love.graphics
+    if xpTileImage == nil then
+      xpTileImage = false
+      if love.image and love.image.newImageData and g.newImage then
+        local data = love.image.newImageData(8, 8)
+        for py, row in ipairs(XP_TILE_ROWS) do
+          for px = 1, 8 do
+            if row:sub(px, px) == "x" then
+              data:setPixel(px - 1, py - 1, 0, 0, 0, 1)
+            end
+          end
+        end
+        xpTileImage = g.newImage(data)
+        xpTileImage:setFilter("nearest", "nearest")
+      end
+    end
+    if xpTileImage then
+      g.setColor(1, 1, 1, 1)
+      g.draw(xpTileImage, x, y)
+      return
+    end
+
+    -- Headless test stubs cannot construct ImageData; draw the same glyph.
+    g.setColor(0, 0, 0, 1)
+    for py, row in ipairs(XP_TILE_ROWS) do
+      for px = 1, 8 do
+        if row:sub(px, px) == "x" then
+          g.rectangle("fill", x + px - 1, y + py - 1, 1, 1)
+        end
+      end
+    end
+  end
+
+  local function drawWideExpBar(px, mode)
+    local g = love.graphics
+    g.setShader()
+    g.setColor(1, 1, 1, 1)
+    g.rectangle("fill", 184, 88, 120, 16)
+
+    local border = Font.BORDER
+    Font.drawCode(border.v, 184, 88)
+    Font.drawCode(border.v, 296, 88)
+    Font.drawCode(border.bl, 184, 96)
+    Font.drawCode(border.br, 296, 96)
+    for x = 192, 288, 8 do Font.drawCode(border.h, x, 96) end
+
+    g.setColor(0, 0, 0, 1)
+    drawXpTile(192, WIDE_EXP_Y)
+    HudTiles.tile(0x62, 200, WIDE_EXP_Y)
+
+    local fill = math.floor(px * WIDE_EXP_SEGMENTS * 8 / EXP_WIDTH)
+    for i = 0, WIDE_EXP_SEGMENTS - 1 do
+      local segment = math.min(8, math.max(0, fill - i * 8))
+      HudTiles.tile(segment >= 8 and 0x6B or 0x63 + segment,
+        WIDE_EXP_X + i * 8, WIDE_EXP_Y)
+    end
+    HudTiles.tile(HudTiles.capTile(),
+      WIDE_EXP_X + WIDE_EXP_SEGMENTS * 8, WIDE_EXP_Y)
+    if fill > 0 then
+      local color = mode == "black" and EXP_BLACK or EXP_BLUE
+      g.setColor(color[1], color[2], color[3], color[4])
+      g.rectangle("fill", WIDE_EXP_X, WIDE_EXP_Y + 3, fill, 2)
+      PaletteFX.markTrueColor(WIDE_EXP_X, WIDE_EXP_Y + 3, fill, 2)
+    end
+  end
+
   local function drawExpBar(battle, state, slide, sx, sy)
     local mode = optionValue(battle.game, "qol_exp_bar")
     if mode ~= "black" and mode ~= "blue" then return end
     if not battle.player or battle.safari or battle.demo
        or battle.showPlayerBack or slide ~= 0 then return end
     local px = animatedExpPixels(battle, state)
+    if battle:wideLayout() then
+      drawWideExpBar(px, mode)
+      return
+    end
     if px <= 0 then return end
     local x, y = EXP_X + EXP_WIDTH - px + sx, EXP_Y + sy
     local coveredThrough
