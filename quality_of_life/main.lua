@@ -106,12 +106,13 @@ return function(mod)
   local function useFlash(ow, game)
     local TextBox = require("src.render.TextBox")
     local Transition = require("src.render.Transition")
-    ow.dark = false
     game.save.flashLit = true
     game.stack:push(TextBox.new(game,
       game.data.text._FlashLightsAreaText
         or Strings("A blinding FLASH\nlights the area!"), function()
-        game.stack:push(Transition.whiteFlash(game))
+        game.stack:push(Transition.whiteFlash(game, nil, function()
+          ow:setDark(false)
+        end))
       end))
   end
 

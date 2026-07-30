@@ -93,7 +93,7 @@ local fieldResult = "nothing"
 local facingNpc, strengthMon, surfMon
 local facingWater, surfs, fishedWith = false, 0, nil
 local fieldMoveMons = {}
-local flyDest, escapes = nil, 0
+local flyDest, escapes, darkChanges = nil, 0, 0
 local overworld = {
   isOverworld = true,
   map = { id = "PALLET_TOWN", def = { tileset = "OVERWORLD" } },
@@ -119,6 +119,10 @@ local overworld = {
   goFishing = function(_, rod) fishedWith = rod end,
   flyTo = function(_, mapId) flyDest = mapId end,
   beginTeleportOut = function() escapes = escapes + 1 end,
+  setDark = function(self, dark)
+    darkChanges = darkChanges + 1
+    self.dark = dark
+  end,
   partyKnows = function(_, move)
     if move == "STRENGTH" then
       strengthChecks = strengthChecks + 1
@@ -340,10 +344,16 @@ fieldMenu = worldStack:top()
 input.pressed = { a = true }
 fieldMenu:update(0)
 input.pressed = {}
-T.eq(overworld.dark, false, "FLASH lights the current dark map")
 T.eq(game.save.flashLit, true, "FLASH records the map lighting state")
 T.check(worldStack:top() ~= overworld, "FLASH shows the normal field-move message")
-worldStack:pop()
+T.eq(overworld.dark, true, "FLASH keeps the map dark through its message")
+local flashText = worldStack:pop()
+flashText.onDone()
+local whiteFlash = worldStack:pop()
+T.eq(overworld.dark, true, "FLASH keeps the map dark through the white flash")
+whiteFlash.onDone()
+T.eq(overworld.dark, false, "FLASH lights the current dark map after the flash")
+T.eq(darkChanges, 1, "FLASH invalidates dark map and sprite palettes")
 
 menu.index = 2
 input.pressed = { a = true }
