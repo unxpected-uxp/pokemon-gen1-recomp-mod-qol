@@ -1,7 +1,7 @@
 {
   "id": "quality_of_life",
   "name": "Quality of Life from later generations",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,5 +13,5 @@
   "dependencies": [],
   "optional_dependencies": [],
   "conflicts": [],
-  "description": "Various quality of life improvements from later generations."
+  "description": "Various quality of life improvements from later generations. During battle enjoy a XP bar and an indicator for caugh Pokemon. Use HM's and fishing rods easily in the overworld without going in the menu. Have banners show your current location when you change the area."
 }

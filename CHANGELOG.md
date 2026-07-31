@@ -1,6 +1,17 @@
 # Changelog
 
-## 1.1.2
+## v1.2.0
+
+### Added
+
+- Location banners - Always know where you are!
+
+### Changed
+
+- Split features into separate modules
+- Prepare repo for auto update
+
+## v1.1.2
 
 ### Added
 
@@ -11,7 +22,7 @@
 
 - FLASH not working from the convenience popup since since recomp version 0.1.42
 
-## 1.1.1
+## v1.1.1
 
 ### Added
 
@@ -21,7 +32,7 @@
 
 - Exp bar sometimes rendered on top of popups
 
-## 1.1.0
+## v1.1.0
 
 ### Added
 
@@ -30,7 +41,7 @@
     - When facing water, pressing [A] automatically asks whether you want to FISH or SURF.
     - When FLY, DIG, FLASH or TELEPORT is available, pressing [SELECT] will let you do that directly.
 
-## 1.0.0
+## v1.0.0
 
 ### Added
 

@@ -16,13 +16,21 @@ local function read(path)
   return source
 end
 
-local modFiles = {
-  ["mods/quality_of_life/manifest.json"] =
-    read("mods/quality_of_life/manifest.json"),
-  ["mods/quality_of_life/main.lua"] = read("mods/quality_of_life/main.lua"),
-  ["mods/quality_of_life/transforms.lua"] =
-    read("mods/quality_of_life/transforms.lua"),
-}
+local modFiles = {}
+for _, name in ipairs({
+  "manifest.json",
+  "main.lua",
+  "qol_options.lua",
+  "qol_battle_overlays.lua",
+  "qol_feature_xp_bar.lua",
+  "qol_feature_caught_indicator.lua",
+  "qol_feature_easy_interactions.lua",
+  "qol_feature_location_banners.lua",
+  "transforms.lua",
+}) do
+  modFiles["mods/quality_of_life/" .. name] =
+    read("mods/quality_of_life/" .. name)
+end
 local run = T.sdk.loadMod("mods/quality_of_life",
   { data = Data, fs = T.sdk.memfs(modFiles) })
 T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
@@ -87,6 +95,7 @@ T.check(menu and menu.screenId == exports.screenId, "opens the custom submenu")
 T.eq(menu.rows[1].value(game), "OFF", "EXP bar defaults off")
 T.eq(menu.rows[2].value(game), "OFF", "indicator defaults off")
 T.eq(menu.rows[3].value(game), "OFF", "Easy interactions default off")
+T.eq(menu.rows[4].value(game), "OFF", "Location banners default off")
 
 local fieldChecks, cuts, strengthChecks, surfChecks = 0, 0, 0, 0
 local fieldResult = "nothing"
@@ -94,6 +103,7 @@ local facingNpc, strengthMon, surfMon
 local facingWater, surfs, fishedWith = false, 0, nil
 local fieldMoveMons = {}
 local flyDest, escapes, darkChanges = nil, 0, 0
+local baseUIDraws = 0
 local overworld = {
   isOverworld = true,
   map = { id = "PALLET_TOWN", def = { tileset = "OVERWORLD" } },
@@ -123,6 +133,7 @@ local overworld = {
     darkChanges = darkChanges + 1
     self.dark = dark
   end,
+  drawUI = function() baseUIDraws = baseUIDraws + 1 end,
   partyKnows = function(_, move)
     if move == "STRENGTH" then
       strengthChecks = strengthChecks + 1
@@ -161,6 +172,47 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
   "right enables Easy interactions")
 T.eq(menu.rows[3].value(game), "ON", "submenu refreshes Easy interactions")
 T.eq(writes, 3, "submenu changes persist immediately")
+
+menu.index = 4
+input.pressed = { right = true }
+menu:update(0)
+input.pressed = {}
+T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, true,
+  "right enables location banners")
+T.eq(menu.rows[4].value(game), "ON", "submenu refreshes location banners")
+T.eq(writes, 4, "location banner changes persist immediately")
+
+local oldDrawBox, oldFontDraw, oldFontWidth = Font.drawBox, Font.draw, Font.width
+local bannerBox, bannerText
+Font.drawBox = function(tx, ty, tw, th) bannerBox = { tx, ty, tw, th } end
+Font.width = function(text) return #text * 8 end
+Font.draw = function(text, x, y) bannerText = { text = text, x = x, y = y } end
+Runtime.emit("map.entered", {
+  mapId = "PALLET_TOWN", map = { def = { label = "PalletTown" } },
+})
+overworld:drawUI()
+T.eq(baseUIDraws, 1, "location banners preserve the base overworld UI")
+T.check(bannerBox[1] == 0 and bannerBox[2] == 14
+        and bannerBox[3] == 20 and bannerBox[4] == 4,
+  "location banner draws a full-width bottom box")
+T.eq(bannerText.text, "PALLET TOWN", "location banner uses the Town Map name")
+T.eq(bannerText.y, 128, "location name is vertically centered in the banner")
+
+for _ = 2, 120 do overworld:drawUI() end
+bannerBox, bannerText = nil, nil
+overworld:drawUI()
+T.eq(bannerText, nil, "location banner expires without blocking movement")
+Runtime.emit("map.entered", {
+  mapId = "PALLET_TOWN", map = { def = { label = "PalletTown" } },
+})
+overworld:drawUI()
+T.eq(bannerText, nil, "the same displayed location does not reopen the banner")
+Runtime.emit("map.entered", {
+  mapId = "ROUTE_1", map = { def = { label = "Route1" } },
+})
+overworld:drawUI()
+T.eq(bannerText.text, "ROUTE 1", "a new area opens a new location banner")
+Font.drawBox, Font.draw, Font.width = oldDrawBox, oldFontDraw, oldFontWidth
 
 Runtime.emit("world.interacted", { kind = "sign" })
 T.eq(fieldChecks, 0, "normal interactions retain priority")
