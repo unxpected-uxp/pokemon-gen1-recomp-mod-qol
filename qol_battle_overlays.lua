@@ -1,5 +1,39 @@
 local M = {}
 
+-- Dramatic Shape's 3D-BTL path moves the classic HUD bands out of the
+-- 160x144 battle canvas and composites them into a full-window canvas.  Its
+-- live shot exposes the exact window transform.  Join that canvas when it is
+-- present; returning false keeps every other renderer on the normal path.
+local function drawSnappedHud(battle, side, draw)
+  local shot = battle and battle.dramaticShapeShot
+  if type(shot) ~= "table" or shot.canvas == nil then return false end
+  local pw, ly, scale = tonumber(shot.pw), tonumber(shot.ly),
+                        tonumber(shot.scale)
+  if not pw or not ly or not scale or pw <= 0 or scale <= 0 then return false end
+
+  local originX
+  if side == "player" then
+    -- The whole 160px player band is snapped so its right edge touches the
+    -- window's right edge.
+    originX = pw - 160 * scale
+  elseif side == "enemy" then
+    -- The enemy panel starts at classic x=8 and is snapped to the left edge.
+    originX = -8 * scale
+  else
+    return false
+  end
+
+  local g = love.graphics
+  local priorCanvas = g.getCanvas()
+  local ok, err = pcall(function()
+    g.setCanvas(shot.canvas)
+    draw(originX, ly, scale)
+  end)
+  if priorCanvas then g.setCanvas(priorCanvas) else g.setCanvas() end
+  if not ok then error(err, 0) end
+  return true
+end
+
 function M.new(mod)
   local overlays = {}
   local wrapped = setmetatable({}, { __mode = "k" })
@@ -41,6 +75,9 @@ function M.new(mod)
           sx = sx,
           sy = sy,
           slide = (self.introSlide or 0) * 4,
+          drawSnappedHud = function(side, draw)
+            return drawSnappedHud(self, side, draw)
+          end,
         }
 
         for i, overlay in ipairs(overlays) do

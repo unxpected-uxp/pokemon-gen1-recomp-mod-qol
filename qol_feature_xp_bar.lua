@@ -189,6 +189,21 @@ function feature.install(mod, services)
     if not battle.player or battle.safari or battle.demo
        or battle.showPlayerBack or context.slide ~= 0 then return end
     local px = animatedExpPixels(battle, state)
+    if px > 0 and context.drawSnappedHud
+       and context.drawSnappedHud("player", function(originX, originY, scale)
+         -- 3D-BTL has already moved the classic player HUD into the window
+         -- canvas.  Draw the fill into that same canvas with the identical
+         -- classic-to-window transform instead of leaving it behind in the
+         -- centered 160x144 battle surface.
+         local x = originX + (EXP_X + EXP_WIDTH - px + context.sx) * scale
+         local y = originY + (EXP_Y + context.sy) * scale
+         local color = mode == "black" and EXP_BLACK or EXP_BLUE
+         love.graphics.setShader()
+         love.graphics.setColor(color[1], color[2], color[3], color[4])
+         love.graphics.rectangle("fill", x, y, px * scale, 2 * scale)
+       end) then
+      return
+    end
     if battle:wideLayout() then
       drawWideExpBar(px, mode)
       return

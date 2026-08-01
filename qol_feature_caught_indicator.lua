@@ -57,18 +57,28 @@ function feature.install(mod, services)
        or not enemyHudVisible(battle, context.slide) then return end
     local image, quad = ballAsset()
     if not image then return end
-    local x, y
-    if battle:wideLayout() then
-      x, y = 112, 7
-    else
-      local hudShake = battle.fx and battle.fx.hudShakeX or 0
-      x, y = 7 + context.sx + hudShake, 7 + context.sy
-    end
+    local hudShake = battle.fx and battle.fx.hudShakeX or 0
+    local classicX = 7 + context.sx + hudShake
+    local classicY = 7 + context.sy
     love.graphics.setShader()
     if mode == "red" then
       love.graphics.setColor(1, 0, 0, 1)
     else
       love.graphics.setColor(1, 1, 1, 1)
+    end
+    if context.drawSnappedHud
+       and context.drawSnappedHud("enemy", function(originX, originY, scale)
+         love.graphics.draw(image, quad,
+           originX + classicX * scale, originY + classicY * scale,
+           0, scale, scale)
+       end) then
+      return
+    end
+    local x, y
+    if battle:wideLayout() then
+      x, y = 112, 7
+    else
+      x, y = classicX, classicY
     end
     love.graphics.draw(image, quad, x, y)
     PaletteFX.markTrueColor(x, y, 8, 8)

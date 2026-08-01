@@ -36,7 +36,8 @@ After installing, features default to **OFF**.
 <figure>
   <figcaption>
     <em>
-      XP bar and caught Pokémon indicator (Gen2 style), supports normal and wide battle modes
+      XP bar and caught Pokémon indicator (Gen2 style), supports normal, wide,
+      and Dramatic Shape 3D battle modes
     </em>
   </figcaption>
   <img src="images/battle.gif">

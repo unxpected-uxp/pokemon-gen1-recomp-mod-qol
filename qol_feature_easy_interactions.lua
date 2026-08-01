@@ -158,9 +158,12 @@ function feature.install(mod, services)
       local game = mod.world.game
       if not enabled(game) or not game or not game.stack
          or game.stack:top() ~= ow then return false end
+      -- Some Gen1Recomp builds report one mapped controller press through
+      -- both gamepad and raw-joystick callbacks. START must retain priority
+      -- if that produces a spurious SELECT edge at the same time.
+      if game.input:wasPressed("start") then return false end
       if not game.input:wasPressed("select") then return false end
-      openSelectFieldMoves(ow)
-      return true
+      return openSelectFieldMoves(ow)
     end
   end
 

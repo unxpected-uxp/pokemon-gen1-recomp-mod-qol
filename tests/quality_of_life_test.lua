@@ -9,6 +9,32 @@ Data:load()
 local Font = require("src.render.Font")
 Font.load(Data)
 
+-- Give the mod's overworld-input wrapper a minimal base handler. This keeps
+-- the feature tests focused on whether QoL consumes an edge or passes it on,
+-- without constructing a complete live OverworldState.
+local OverworldController = require("src.world.OverworldController")
+local originalOverworldHandleInput = OverworldController.handleInput
+local baseInputCalls = 0
+OverworldController.handleInput = function()
+  baseInputCalls = baseInputCalls + 1
+end
+
+-- Recreate Gen1Recomp 0.1.41-0.1.54's raw-input behavior even when these
+-- tests run against an engine checkout that already contains the upstream
+-- guard. The mod must remain independently capable of protecting released
+-- builds that users already have installed.
+local EngineInput = require("src.core.Input")
+local rawInputMethods = {}
+for _, name in ipairs({
+  "joystickpressed", "joystickreleased", "joystickaxis", "joystickhat",
+}) do
+  local original = EngineInput[name]
+  rawInputMethods[name] = original
+  EngineInput[name] = function(self, _, ...)
+    return original(self, nil, ...)
+  end
+end
+
 local function read(path)
   local file = assert(io.open(path, "rb"))
   local source = file:read("*a")
@@ -21,6 +47,7 @@ for _, name in ipairs({
   "manifest.json",
   "main.lua",
   "qol_options.lua",
+  "qol_controller_compat.lua",
   "qol_battle_overlays.lua",
   "qol_feature_xp_bar.lua",
   "qol_feature_caught_indicator.lua",
@@ -37,6 +64,30 @@ T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
 local exports = run.loader.exports.quality_of_life
 T.check(exports and exports.screenId == "QualityOfLife",
   "exports the submenu screen id")
+
+-- Gen1Recomp 0.1.41+ sends raw joystick callbacks alongside standardized
+-- gamepad callbacks. A mapped Switch controller reports Plus as gamepad
+-- START and raw button 7; the engine's generic fallback otherwise adds
+-- SELECT, while raw button 10 turns L into START.
+local mappedPad = { isGamepad = function() return true end }
+EngineInput:init()
+EngineInput:gamepadpressed(mappedPad, "start")
+EngineInput:joystickpressed(mappedPad, 7)
+EngineInput:step()
+T.check(EngineInput:wasPressed("start")
+        and not EngineInput:wasPressed("select"),
+  "mapped controller Plus remains START without a duplicate raw SELECT")
+EngineInput:reset()
+EngineInput:joystickpressed(mappedPad, 10)
+EngineInput:step()
+T.check(not EngineInput:wasPressed("start"),
+  "mapped controller shoulder buttons do not become raw START")
+local rawPad = { isGamepad = function() return false end }
+EngineInput:reset()
+EngineInput:joystickpressed(rawPad, 10)
+EngineInput:step()
+T.check(EngineInput:wasPressed("start"),
+  "unmapped joystick fallback keeps its raw START binding")
 
 local loadChunk = loadstring or load
 local transform = assert(loadChunk(modFiles[
@@ -369,8 +420,14 @@ game.save.inventory.OLD_ROD = nil
 game.save.inventory.GOOD_ROD = nil
 game.save.inventory.SUPER_ROD = nil
 
-local OverworldController = require("src.world.OverworldController")
 local oldScreensPush = Screens.push
+local beforeStart = baseInputCalls
+input.pressed = { start = true, select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+T.eq(baseInputCalls, beforeStart + 1,
+  "START reaches the base handler despite a duplicate SELECT edge")
+
 local pushedScreen, pushedOpts
 Screens.push = function(_, id, opts)
   pushedScreen, pushedOpts = id, opts
@@ -531,15 +588,22 @@ local battle = {
 
 local oldDraw, oldRectangle = love.graphics.draw, love.graphics.rectangle
 local ball, bar, draws, rectangles
-love.graphics.draw = function(_, quad, x, y)
+love.graphics.draw = function(_, quad, x, y, _, scaleX, scaleY)
   if y == nil then quad, x, y = nil, quad, x end
   local r, g, b = love.graphics.getColor()
-  ball = { quad = quad, x = x, y = y, color = { r, g, b } }
+  ball = {
+    quad = quad, x = x, y = y, color = { r, g, b },
+    canvas = love.graphics.getCanvas(),
+    scaleX = scaleX or 1, scaleY = scaleY or scaleX or 1,
+  }
   if draws then draws[#draws + 1] = ball end
 end
 love.graphics.rectangle = function(mode, x, y, w, h)
   local r, g, b = love.graphics.getColor()
-  bar = { mode = mode, x = x, y = y, w = w, h = h, color = { r, g, b } }
+  bar = {
+    mode = mode, x = x, y = y, w = w, h = h, color = { r, g, b },
+    canvas = love.graphics.getCanvas(),
+  }
   if rectangles then rectangles[#rectangles + 1] = bar end
 end
 
@@ -565,8 +629,41 @@ T.check(ball and ball.x == 9 and ball.y == 10,
   "caught indicator follows screen shake")
 T.check(ball.color[1] == 1 and ball.color[2] == 0 and ball.color[3] == 0,
   "red indicator mode draws red")
-
 local classicPixels = bar.w
+
+-- Dramatic Shape's 3D-BTL mode snaps the classic HUD bands into a
+-- full-window canvas. Both QoL overlays must follow those bands rather than
+-- remaining in the centered 160x144 battle canvas.
+local voxelCanvas = {}
+local priorCanvas = love.graphics.getCanvas()
+battle.fx = nil
+battle.dramaticShapeShot = {
+  canvas = voxelCanvas, pw = 1920, ly = 108, scale = 6,
+}
+draws, rectangles, bar, ball = {}, {}, nil, nil
+battle:draw()
+local voxelPixels = exports.expPixels(battle)
+T.check(bar and bar.canvas == voxelCanvas,
+  "voxel EXP bar draws into the canvas that owns the snapped player HUD")
+T.eq(bar.x, 1920 - 160 * 6 + (80 + 67 - voxelPixels) * 6,
+  "voxel EXP bar follows the player HUD to the window's right edge")
+T.eq(bar.y, 108 + 89 * 6,
+  "voxel EXP bar stays on the snapped player HUD row")
+T.check(bar.w == voxelPixels * 6 and bar.h == 2 * 6,
+  "voxel EXP bar scales with the snapped HUD")
+T.check(ball and ball.canvas == voxelCanvas,
+  "voxel caught indicator draws into the snapped enemy HUD canvas")
+T.eq(ball.x, -8 * 6 + 7 * 6,
+  "voxel caught indicator follows the enemy HUD to the window's left edge")
+T.eq(ball.y, 108 + 7 * 6,
+  "voxel caught indicator stays on the snapped enemy HUD row")
+T.check(ball.scaleX == 6 and ball.scaleY == 6,
+  "voxel caught indicator scales with the snapped HUD")
+T.eq(love.graphics.getCanvas(), priorCanvas,
+  "voxel overlays restore the battle canvas after drawing")
+battle.dramaticShapeShot = nil
+draws, rectangles = nil, nil
+
 battle.wideLayout = function() return true end
 battle.phase, battle.fx, draws, rectangles = "moveSelect", nil, {}, {}
 game.save.options.modOptions.quality_of_life.qol_exp_bar = "blue"
@@ -679,11 +776,16 @@ game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
 battle:draw()
-T.eq(baseDraws, 10, "disabled overlays still call the base renderer")
+T.eq(baseDraws, 11, "disabled overlays still call the base renderer")
 T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle
 love.graphics.setColor(1, 1, 1, 1)
 run.release()
+for name, original in pairs(rawInputMethods) do
+  EngineInput[name] = original
+end
+rawset(EngineInput, "__qolMappedGamepadGuard", nil)
+OverworldController.handleInput = originalOverworldHandleInput
 Screens.invalidate()
 T.finish("qol later gen")

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- XP bar and caught Pokémon indicator now follow the moved HUD panels in
+  Dramatic Shape Voxel Mod's 3D battle mode.
+- Mapped controllers no longer receive duplicate raw joystick bindings that
+  could turn shoulder buttons into START or make START/Plus stop responding.
+
 ## v1.2.1
 
 ### Added
