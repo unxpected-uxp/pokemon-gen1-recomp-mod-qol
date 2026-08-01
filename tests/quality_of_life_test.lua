@@ -177,12 +177,33 @@ menu.index = 4
 input.pressed = { right = true }
 menu:update(0)
 input.pressed = {}
-T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, true,
-  "right enables location banners")
-T.eq(menu.rows[4].value(game), "ON", "submenu refreshes location banners")
+T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, 1,
+  "right enables one-second location banners")
+T.eq(menu.rows[4].value(game), "ON (1 SECOND)",
+  "submenu refreshes the one-second location banner mode")
 T.eq(writes, 4, "location banner changes persist immediately")
 
+input.pressed = { right = true }
+menu:update(0)
+T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
+  "location banners support a two-second mode")
+menu:update(0)
+T.eq(menu.rows[4].value(game), "ON (3 SECONDS)",
+  "location banners support a three-second mode")
+menu:update(0)
+T.eq(menu.rows[4].value(game), "OFF", "location banner modes wrap to off")
+input.pressed = {}
+
+-- Existing saves stored true for the old toggle; retain its two-second timing.
+game.save.options.modOptions.quality_of_life.qol_location_banners = true
+run.loader.modOptions.quality_of_life.qol_location_banners = true
+T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
+  "the old enabled value migrates to the two-second mode")
+
 local oldDrawBox, oldFontDraw, oldFontWidth = Font.drawBox, Font.draw, Font.width
+local oldGetTime = love.timer.getTime
+local bannerTime = 0
+love.timer.getTime = function() return bannerTime end
 local bannerBox, bannerText
 Font.drawBox = function(tx, ty, tw, th) bannerBox = { tx, ty, tw, th } end
 Font.width = function(text) return #text * 8 end
@@ -198,10 +219,16 @@ T.check(bannerBox[1] == 0 and bannerBox[2] == 14
 T.eq(bannerText.text, "PALLET TOWN", "location banner uses the Town Map name")
 T.eq(bannerText.y, 128, "location name is vertically centered in the banner")
 
-for _ = 2, 120 do overworld:drawUI() end
+for frame = 2, 239 do
+  bannerTime = (frame - 1) / 120
+  overworld:drawUI()
+end
+T.eq(bannerText.text, "PALLET TOWN",
+  "location banner duration is independent of render frame count")
 bannerBox, bannerText = nil, nil
+bannerTime = 2
 overworld:drawUI()
-T.eq(bannerText, nil, "location banner expires without blocking movement")
+T.eq(bannerText, nil, "location banner expires after two elapsed seconds")
 Runtime.emit("map.entered", {
   mapId = "PALLET_TOWN", map = { def = { label = "PalletTown" } },
 })
@@ -212,7 +239,15 @@ Runtime.emit("map.entered", {
 })
 overworld:drawUI()
 T.eq(bannerText.text, "ROUTE 1", "a new area opens a new location banner")
+bannerBox, bannerText = nil, nil
+Runtime.emit("map.entered", {
+  mapId = "ROCK_TUNNEL_POKECENTER",
+  map = { def = { label = "RockTunnelPokecenter" } },
+})
+overworld:drawUI()
+T.eq(bannerText, nil, "the Route 10 Pokemon Center has no location banner")
 Font.drawBox, Font.draw, Font.width = oldDrawBox, oldFontDraw, oldFontWidth
+love.timer.getTime = oldGetTime
 
 Runtime.emit("world.interacted", { kind = "sign" })
 T.eq(fieldChecks, 0, "normal interactions retain priority")

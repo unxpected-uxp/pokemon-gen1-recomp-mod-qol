@@ -5,9 +5,11 @@ local M = {}
 function M.install(mod, features)
   local schema = {}
   local modes = {}
+  local aliases = {}
   for _, feature in ipairs(features) do
     local option = feature.option
     schema[#schema + 1] = option
+    aliases[option.key] = option.aliases
     if option.type == "choice" then
       local choices = {}
       for _, choice in ipairs(option.choices) do
@@ -27,8 +29,13 @@ function M.install(mod, features)
     local options = game and game.save and game.save.options
     local bucket = options and options.modOptions
                    and options.modOptions[mod.id]
-    if bucket and bucket[key] ~= nil then return bucket[key] end
-    return mod.options:get(key)
+    local value = bucket and bucket[key]
+    if value == nil then value = mod.options:get(key) end
+    local optionAliases = aliases[key]
+    if optionAliases and optionAliases[value] ~= nil then
+      return optionAliases[value]
+    end
+    return value
   end
 
   local function setOption(game, key, value)

@@ -1,12 +1,19 @@
-local LOCATION_BANNER_FRAMES = 120
 local OVERLAY_KEY = "__qolLocationBannerOverlay"
+local SUPPRESSED_MAPS = { ROCK_TUNNEL_POKECENTER = true }
 
 local feature = {
   option = {
     key = "qol_location_banners",
     label = "LOCATION BANNERS",
-    type = "toggle",
+    type = "choice",
     default = false,
+    choices = {
+      { "OFF", false },
+      { "ON (1 SECOND)", 1 },
+      { "ON (2 SECONDS)", 2 },
+      { "ON (3 SECONDS)", 3 },
+    },
+    aliases = { [true] = 2 },
   },
   menu = {
     label = "LOCATION BANNERS",
@@ -37,7 +44,8 @@ function feature.install(mod, services)
     local state = bannerStates[ow]
     if not state then return end
     local game = mod.world.game
-    if not optionValue(game, "qol_location_banners") or state.frames <= 0 then
+    if not optionValue(game, "qol_location_banners")
+       or love.timer.getTime() >= state.expiresAt then
       bannerStates[ow] = nil
       return
     end
@@ -48,19 +56,26 @@ function feature.install(mod, services)
     local width = Font.width(state.name)
     Font.draw(state.name, math.max(8, math.floor((160 - width) / 2)), 128)
     love.graphics.setColor(1, 1, 1, 1)
-    state.frames = state.frames - 1
   end
 
   mod.events:on("map.entered", function(event)
     local game = mod.world.game
-    if not event or not event.mapId
-       or not optionValue(game, "qol_location_banners") then return end
+    if not event or not event.mapId then return end
     local ow = mod.world:overworld()
     if not ow then return end
+    if SUPPRESSED_MAPS[event.mapId] then
+      bannerStates[ow] = nil
+      return
+    end
+    local duration = optionValue(game, "qol_location_banners")
+    if type(duration) ~= "number" then return end
     local name = locationName(game, event.mapId, event.map)
     if bannerLastNames[ow] == name then return end
     bannerLastNames[ow] = name
-    bannerStates[ow] = { name = name, frames = LOCATION_BANNER_FRAMES }
+    bannerStates[ow] = {
+      name = name,
+      expiresAt = love.timer.getTime() + duration,
+    }
 
     local overlay = rawget(ow, OVERLAY_KEY)
     if not overlay and type(ow.drawUI) == "function" then
