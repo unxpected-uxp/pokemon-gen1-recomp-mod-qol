@@ -47,7 +47,7 @@ for _, name in ipairs({
   "manifest.json",
   "main.lua",
   "qol_options.lua",
-  "qol_controller_compat.lua",
+  "qol_controller_fix.lua",
   "qol_battle_overlays.lua",
   "qol_feature_xp_bar.lua",
   "qol_feature_caught_indicator.lua",

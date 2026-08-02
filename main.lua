@@ -23,7 +23,7 @@ return function(mod)
     loadModule("qol_feature_easy_interactions.lua"),
     loadModule("qol_feature_location_banners.lua"),
   }
-  loadModule("qol_controller_compat.lua").install()
+  loadModule("qol_controller_fix.lua").install()
   local services = {
     options = loadModule("qol_options.lua").install(mod, features),
     battle = loadModule("qol_battle_overlays.lua").new(mod),
