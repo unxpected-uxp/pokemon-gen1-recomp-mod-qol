@@ -38,18 +38,17 @@ function M.install(mod, features)
     return value
   end
 
+  local function optionBucket(container)
+    container.modOptions = container.modOptions or {}
+    container.modOptions[mod.id] = container.modOptions[mod.id] or {}
+    return container.modOptions[mod.id]
+  end
+
   local function setOption(game, key, value)
-    local options = game.save.options
-    options.modOptions = options.modOptions or {}
-    options.modOptions[mod.id] = options.modOptions[mod.id] or {}
-    options.modOptions[mod.id][key] = value
+    optionBucket(game.save.options)[key] = value
 
     -- Keep mod.options:get synchronized until options.lua is reloaded.
-    if game.mods then
-      game.mods.modOptions = game.mods.modOptions or {}
-      game.mods.modOptions[mod.id] = game.mods.modOptions[mod.id] or {}
-      game.mods.modOptions[mod.id][key] = value
-    end
+    if game.mods then optionBucket(game.mods)[key] = value end
     if game.writeOptions then game:writeOptions() end
   end
 

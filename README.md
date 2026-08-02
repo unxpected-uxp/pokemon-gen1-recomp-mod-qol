@@ -5,8 +5,12 @@ Can be toggled individually.
 
 ## Installation
 
-Download the newest release: https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol
-and extract the `quality_of_life` folder into the game's `mods` directory.
+Download the newest `.zip` from the
+[GitHub Releases page](https://github.com/unxpected-uxp/pokemon-gen1-recomp-mod-qol/releases/latest),
+then use **MODS → Import mod .zip** in the game.
+
+For a manual installation, extract the archive into a `quality_of_life` folder
+inside the game's `mods` directory.
 
 ### Portable mode
 
@@ -36,7 +40,7 @@ After installing, features default to **OFF**.
 <figure>
   <figcaption>
     <em>
-      XP bar and caught Pokémon indicator (Gen2 style), supports normal and wide battle modes
+      XP bar and caught Pokémon indicator (Gen2 style), supports normal, wide and Dramatic Shape mod 3D battles
     </em>
   </figcaption>
   <img src="images/battle.gif">

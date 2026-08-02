@@ -67,6 +67,11 @@ end
 
 local input = { pressed = {} }
 function input:wasPressed(key) return self.pressed[key] or false end
+local function press(screen, key)
+  input.pressed = { [key] = true }
+  screen:update(0)
+  input.pressed = {}
+end
 
 local writes = 0
 local game = {
@@ -151,48 +156,38 @@ T.eq(fieldChecks, 0, "an unhandled A press does nothing while Auto HM use is off
 Runtime.emit("world.interacted", { kind = "npc", target = facingNpc })
 T.eq(strengthChecks, 0, "a boulder interaction does nothing while Auto HM use is off")
 
-input.pressed = { right = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_exp_bar, "black",
   "right cycles the EXP bar to black")
 T.eq(menu.rows[1].value(game), "ON (BLACK)", "submenu refreshes the EXP label")
 menu.index = 2
-input.pressed = { left = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "left")
 T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "red",
   "left wraps the indicator from off to red")
 T.eq(menu.rows[2].value(game), "ON (RED)", "submenu refreshes the indicator label")
 menu.index = 3
-input.pressed = { right = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
   "right enables Easy interactions")
 T.eq(menu.rows[3].value(game), "ON", "submenu refreshes Easy interactions")
 T.eq(writes, 3, "submenu changes persist immediately")
 
 menu.index = 4
-input.pressed = { right = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, 1,
   "right enables one-second location banners")
 T.eq(menu.rows[4].value(game), "ON (1 SECOND)",
   "submenu refreshes the one-second location banner mode")
 T.eq(writes, 4, "location banner changes persist immediately")
 
-input.pressed = { right = true }
-menu:update(0)
+press(menu, "right")
 T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
   "location banners support a two-second mode")
-menu:update(0)
+press(menu, "right")
 T.eq(menu.rows[4].value(game), "ON (3 SECONDS)",
   "location banners support a three-second mode")
-menu:update(0)
+press(menu, "right")
 T.eq(menu.rows[4].value(game), "OFF", "location banner modes wrap to off")
-input.pressed = {}
 
 -- Existing saves stored true for the old toggle; retain its two-second timing.
 game.save.options.modOptions.quality_of_life.qol_location_banners = true
@@ -318,6 +313,14 @@ surfMon = { species = "SQUIRTLE" }
 game.save.inventory.GOOD_ROD = 1
 game.save.inventory.SUPER_ROD = 1
 fishedWith = nil
+overworld.player.surfing = true
+local surfChecksBefore = surfChecks
+Runtime.emit("world.interacted", { kind = "none" })
+T.eq(worldStack:top(), overworld, "surfing opens no water action popup")
+T.eq(surfChecks, surfChecksBefore, "surfing does not check another SURF use")
+T.eq(fishedWith, nil, "surfing never starts fishing")
+overworld.player.surfing = false
+
 Runtime.emit("world.interacted", { kind = "none" })
 local waterMenu = worldStack:top()
 T.check(waterMenu ~= overworld and #waterMenu.items == 3,
@@ -328,38 +331,28 @@ T.eq(waterMenu.items[2].label, "SURF", "SURF is the second option")
 T.eq(waterMenu.items[3].label, "CANCEL", "CANCEL is the third option")
 T.eq(waterMenu.ty, 10, "the water popup is anchored to the bottom")
 
-input.pressed = { b = true }
-waterMenu:update(0)
-input.pressed = {}
+press(waterMenu, "b")
 T.eq(worldStack:top(), overworld, "B closes the water popup")
 T.eq(fishedWith, nil, "B does not fish")
 T.eq(surfs, 1, "B does not SURF")
 
 Runtime.emit("world.interacted", { kind = "none" })
 waterMenu = worldStack:top()
-input.pressed = { a = true }
-waterMenu:update(0)
-input.pressed = {}
+press(waterMenu, "a")
 T.eq(fishedWith, "SUPER_ROD", "A uses the default rod option")
 
 fishedWith = nil
 Runtime.emit("world.interacted", { kind = "none" })
 waterMenu = worldStack:top()
-input.pressed = { down = true }
-waterMenu:update(0)
-input.pressed = { a = true }
-waterMenu:update(0)
-input.pressed = {}
+press(waterMenu, "down")
+press(waterMenu, "a")
 T.eq(surfs, 2, "the second popup option starts SURF")
 T.eq(fishedWith, nil, "choosing SURF does not fish")
 
 Runtime.emit("world.interacted", { kind = "none" })
 waterMenu = worldStack:top()
-input.pressed = { up = true }
-waterMenu:update(0)
-input.pressed = { a = true }
-waterMenu:update(0)
-input.pressed = {}
+press(waterMenu, "up")
+press(waterMenu, "a")
 T.eq(worldStack:top(), overworld, "the explicit CANCEL option closes the popup")
 T.eq(surfs, 2, "the explicit CANCEL option does not SURF")
 T.eq(fishedWith, nil, "the explicit CANCEL option does not fish")
@@ -386,9 +379,7 @@ T.eq(fieldMenu.items[1].label, "FLY", "SELECT offers FLY outdoors")
 T.eq(fieldMenu.items[2].label, "TELEPORT", "SELECT offers TELEPORT outdoors")
 T.eq(fieldMenu.items[3].label, "CANCEL", "the outdoor popup ends with CANCEL")
 T.eq(fieldMenu.ty, 10, "the outdoor popup is anchored to the bottom")
-input.pressed = { a = true }
-fieldMenu:update(0)
-input.pressed = {}
+press(fieldMenu, "a")
 T.eq(pushedScreen, "TownMap", "FLY opens the normal Town Map")
 pushedOpts.onFly("CERULEAN_CITY")
 T.eq(flyDest, "CERULEAN_CITY", "the Town Map selection invokes FLY")
@@ -398,11 +389,8 @@ input.pressed = { select = true }
 OverworldController.handleInput(overworld)
 input.pressed = {}
 fieldMenu = worldStack:top()
-input.pressed = { down = true }
-fieldMenu:update(0)
-input.pressed = { a = true }
-fieldMenu:update(0)
-input.pressed = {}
+press(fieldMenu, "down")
+press(fieldMenu, "a")
 T.eq(escapes, 1, "TELEPORT starts the normal escape animation")
 
 fieldMoveMons.FLY, fieldMoveMons.TELEPORT = nil, nil
@@ -417,20 +405,15 @@ fieldMenu = worldStack:top()
 T.eq(fieldMenu.items[1].label, "FLASH", "SELECT offers FLASH first on a dark map")
 T.eq(fieldMenu.items[2].label, "DIG", "SELECT offers DIG second in a dark dungeon")
 T.eq(fieldMenu.items[3].label, "CANCEL", "the dungeon popup ends with CANCEL")
-input.pressed = { down = true }
-fieldMenu:update(0)
-input.pressed = { a = true }
-fieldMenu:update(0)
-input.pressed = {}
+press(fieldMenu, "down")
+press(fieldMenu, "a")
 T.eq(escapes, 2, "DIG starts the normal escape animation")
 
 input.pressed = { select = true }
 OverworldController.handleInput(overworld)
 input.pressed = {}
 fieldMenu = worldStack:top()
-input.pressed = { a = true }
-fieldMenu:update(0)
-input.pressed = {}
+press(fieldMenu, "a")
 T.eq(game.save.flashLit, true, "FLASH records the map lighting state")
 T.check(worldStack:top() ~= overworld, "FLASH shows the normal field-move message")
 T.eq(overworld.dark, true, "FLASH keeps the map dark through its message")
@@ -443,9 +426,7 @@ T.eq(overworld.dark, false, "FLASH lights the current dark map after the flash")
 T.eq(darkChanges, 1, "FLASH invalidates dark map and sprite palettes")
 
 menu.index = 2
-input.pressed = { a = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "a")
 local description = game.stack:top()
 T.check(description ~= menu and description.pages,
   "A opens the selected setting description")
@@ -453,9 +434,7 @@ T.check(#description.pages == 3 and #description.pages[1] == 2,
   "setting descriptions pause after the first two lines")
 game.stack:pop()
 
-input.pressed = { b = true }
-menu:update(0)
-input.pressed = {}
+press(menu, "b")
 T.eq(game.stack:top(), nil, "B closes the shared options screen")
 
 local ManagerState = require("src.mods.ManagerState")
@@ -523,7 +502,7 @@ local battle = {
   kind = "wild",
   frame = 0,
   player = { mon = playerMon },
-  enemy = { mon = { species = "RATTATA" }, fainted = false },
+  enemy = { name = "RATTATA", mon = { species = "RATTATA" }, fainted = false },
   draw = function() baseDraws = baseDraws + 1 end,
   growInScale = function() return nil end,
   wideLayout = function() return false end,
@@ -531,15 +510,21 @@ local battle = {
 
 local oldDraw, oldRectangle = love.graphics.draw, love.graphics.rectangle
 local ball, bar, draws, rectangles
-love.graphics.draw = function(_, quad, x, y)
+love.graphics.draw = function(_, quad, x, y, rotation, scaleX, scaleY)
   if y == nil then quad, x, y = nil, quad, x end
   local r, g, b = love.graphics.getColor()
-  ball = { quad = quad, x = x, y = y, color = { r, g, b } }
+  ball = {
+    quad = quad, x = x, y = y, scaleX = scaleX, scaleY = scaleY,
+    canvas = love.graphics.getCanvas(), color = { r, g, b },
+  }
   if draws then draws[#draws + 1] = ball end
 end
 love.graphics.rectangle = function(mode, x, y, w, h)
   local r, g, b = love.graphics.getColor()
-  bar = { mode = mode, x = x, y = y, w = w, h = h, color = { r, g, b } }
+  bar = {
+    mode = mode, x = x, y = y, w = w, h = h,
+    canvas = love.graphics.getCanvas(), color = { r, g, b },
+  }
   if rectangles then rectangles[#rectangles + 1] = bar end
 end
 
@@ -632,7 +617,53 @@ ball = nil
 battle:draw()
 T.check(ball and ball.x == 112 and ball.y == 7,
   "wide caught indicator aligns with the fixed enemy HUD")
+
+battle.fx = { shakeX = 2, shakeY = 3, hudShakeX = 4 }
+rectangles, ball = {}, nil
+battle:draw()
+local shakenExtension, shakenWideFill
+for _, rectangle in ipairs(rectangles) do
+  if rectangle.x == 186 and rectangle.y == 91
+      and rectangle.w == 120 and rectangle.h == 16 then
+    shakenExtension = rectangle
+  elseif rectangle.x == 210 and rectangle.y == 94 and rectangle.h == 2 then
+    shakenWideFill = rectangle
+  end
+end
+T.check(shakenExtension and shakenWideFill,
+  "wide EXP bar follows battle screen shake")
+T.check(ball and ball.x == 114 and ball.y == 10,
+  "wide caught indicator follows battle screen shake")
 battle.wideLayout = function() return false end
+
+local uiCanvas = love.graphics.newCanvas(160, 144)
+local voxelCanvas = love.graphics.newCanvas(680, 432)
+battle.dramaticShapeShot = {
+  canvas = voxelCanvas, scale = 3, pw = 680, ph = 432, lx = 100, ly = 0,
+}
+love.graphics.setCanvas(uiCanvas)
+bar, ball = nil, nil
+battle:draw()
+T.check(ball and ball.canvas == voxelCanvas and ball.x == -3 and ball.y == 21,
+  "voxel caught indicator sits one logical pixel left of the enemy name")
+T.check(ball.scaleX == 3 and ball.scaleY == 3,
+  "voxel caught indicator uses framebuffer scale")
+T.check(bar and bar.canvas == voxelCanvas and bar.x + bar.w == 641,
+  "voxel EXP bar follows the player HUD to the right edge")
+T.check(bar.y == 267 and bar.h == 6,
+  "voxel EXP bar uses framebuffer coordinates")
+T.eq(love.graphics.getCanvas(), uiCanvas,
+  "voxel overlays restore the engine UI canvas")
+battle.__qolDramaticShapeHudSnapped = false
+bar, ball = nil, nil
+battle:draw()
+T.check(ball and ball.canvas == uiCanvas and ball.x == 13 and ball.y == 10,
+  "voxel HUD fallback uses classic caught-indicator shake")
+T.check(bar and bar.canvas == uiCanvas and bar.x + bar.w == 149,
+  "voxel HUD fallback uses classic EXP-bar shake")
+battle.__qolDramaticShapeHudSnapped = nil
+battle.dramaticShapeShot = nil
+love.graphics.setCanvas()
 
 local originalExp = playerMon.exp
 local initialPixels = classicPixels
@@ -678,8 +709,10 @@ T.check(ball.color[1] == 1 and ball.color[2] == 1 and ball.color[3] == 1,
 game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
+local baseDrawsBeforeDisabled = baseDraws
 battle:draw()
-T.eq(baseDraws, 10, "disabled overlays still call the base renderer")
+T.eq(baseDraws, baseDrawsBeforeDisabled + 1,
+  "disabled overlays still call the base renderer")
 T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle

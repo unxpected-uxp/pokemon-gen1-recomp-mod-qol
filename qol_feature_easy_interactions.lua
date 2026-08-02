@@ -68,6 +68,7 @@ function feature.install(mod, services)
 
   local function useWaterFacing(ow)
     if not ow:facingIsShoreOrWater() then return false end
+    if ow.player and ow.player.surfing then return true end
 
     local game = mod.world.game
     local rod = fishingRod(game)

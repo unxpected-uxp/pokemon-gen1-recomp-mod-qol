@@ -150,64 +150,84 @@ function feature.install(mod, services)
     end
   end
 
-  local function drawWideExpBar(px, mode)
+  local function drawWideExpBar(px, color, sx, sy)
     local g = love.graphics
+    sx, sy = sx or 0, sy or 0
     g.setShader()
     g.setColor(1, 1, 1, 1)
-    g.rectangle("fill", 184, 88, 120, 16)
+    g.rectangle("fill", 184 + sx, 88 + sy, 120, 16)
 
     local border = Font.BORDER
-    Font.drawCode(border.v, 184, 88)
-    Font.drawCode(border.v, 296, 88)
-    Font.drawCode(border.bl, 184, 96)
-    Font.drawCode(border.br, 296, 96)
-    for x = 192, 288, 8 do Font.drawCode(border.h, x, 96) end
+    Font.drawCode(border.v, 184 + sx, 88 + sy)
+    Font.drawCode(border.v, 296 + sx, 88 + sy)
+    Font.drawCode(border.bl, 184 + sx, 96 + sy)
+    Font.drawCode(border.br, 296 + sx, 96 + sy)
+    for x = 192, 288, 8 do Font.drawCode(border.h, x + sx, 96 + sy) end
 
     g.setColor(0, 0, 0, 1)
-    drawXpTile(192, WIDE_EXP_Y)
-    HudTiles.tile(0x62, 200, WIDE_EXP_Y)
+    drawXpTile(192 + sx, WIDE_EXP_Y + sy)
+    HudTiles.tile(0x62, 200 + sx, WIDE_EXP_Y + sy)
 
     local fill = math.floor(px * WIDE_EXP_SEGMENTS * 8 / EXP_WIDTH)
     for i = 0, WIDE_EXP_SEGMENTS - 1 do
       local segment = math.min(8, math.max(0, fill - i * 8))
       HudTiles.tile(segment >= 8 and 0x6B or 0x63 + segment,
-        WIDE_EXP_X + i * 8, WIDE_EXP_Y)
+        WIDE_EXP_X + i * 8 + sx, WIDE_EXP_Y + sy)
     end
     HudTiles.tile(HudTiles.capTile(),
-      WIDE_EXP_X + WIDE_EXP_SEGMENTS * 8, WIDE_EXP_Y)
+      WIDE_EXP_X + WIDE_EXP_SEGMENTS * 8 + sx, WIDE_EXP_Y + sy)
     if fill > 0 then
-      local color = mode == "black" and EXP_BLACK or EXP_BLUE
       g.setColor(color[1], color[2], color[3], color[4])
-      g.rectangle("fill", WIDE_EXP_X, WIDE_EXP_Y + 3, fill, 2)
-      PaletteFX.markTrueColor(WIDE_EXP_X, WIDE_EXP_Y + 3, fill, 2)
+      g.rectangle("fill", WIDE_EXP_X + sx, WIDE_EXP_Y + 3 + sy, fill, 2)
+      PaletteFX.markTrueColor(WIDE_EXP_X + sx, WIDE_EXP_Y + 3 + sy, fill, 2)
     end
+  end
+
+  local function clipForMenu(phase, x, width, origin, scale)
+    local nativeEnd = phase == "moveSelect" and 88
+      or phase == "mimicSelect" and 128
+    if not nativeEnd then return x, width end
+
+    local coverEnd = origin + nativeEnd * scale
+    if x < coverEnd then
+      width = width - (coverEnd - x)
+      x = coverEnd
+    end
+    return x, width
   end
 
   local function drawExpBar(battle, state, context)
     local mode = optionValue(battle.game, "qol_exp_bar")
     if mode ~= "black" and mode ~= "blue" then return end
+    local color = mode == "black" and EXP_BLACK or EXP_BLUE
     if not battle.player or battle.safari or battle.demo
        or battle.showPlayerBack or context.slide ~= 0 then return end
     local px = animatedExpPixels(battle, state)
+    local voxel3dBattleData = context.voxel3dBattleData
+    if voxel3dBattleData then
+      if px <= 0 then return end
+      local scale = voxel3dBattleData.scale
+      local x = voxel3dBattleData.pw - (13 + px) * scale
+      local width = px * scale
+      x, width = clipForMenu(
+        battle.phase, x, width, voxel3dBattleData.lx, scale)
+      if width <= 0 then return end
+      love.graphics.setCanvas(voxel3dBattleData.canvas)
+      love.graphics.setShader()
+      love.graphics.setColor(color[1], color[2], color[3], color[4])
+      love.graphics.rectangle(
+        "fill", x, voxel3dBattleData.ly + EXP_Y * scale, width, 2 * scale)
+      return
+    end
     if battle:wideLayout() then
-      drawWideExpBar(px, mode)
+      drawWideExpBar(px, color, context.sx, context.sy)
       return
     end
     if px <= 0 then return end
     local x = EXP_X + EXP_WIDTH - px + context.sx
     local y = EXP_Y + context.sy
-    local coveredThrough
-    if battle.phase == "moveSelect" then
-      coveredThrough = 87 + context.sx
-    elseif battle.phase == "mimicSelect" then
-      coveredThrough = 127 + context.sx
-    end
-    if coveredThrough and x <= coveredThrough then
-      local hidden = coveredThrough + 1 - x
-      x, px = x + hidden, px - hidden
-      if px <= 0 then return end
-    end
-    local color = mode == "black" and EXP_BLACK or EXP_BLUE
+    x, px = clipForMenu(battle.phase, x, px, context.sx, 1)
+    if px <= 0 then return end
     love.graphics.setShader()
     love.graphics.setColor(color[1], color[2], color[3], color[4])
     love.graphics.rectangle("fill", x, y, px, 2)

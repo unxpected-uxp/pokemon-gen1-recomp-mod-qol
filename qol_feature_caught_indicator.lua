@@ -49,6 +49,11 @@ function feature.install(mod, services)
       and slide == 0 and not battle.introBalls and not battle.enemy.fainted
   end
 
+  local function enemyNameX(battle)
+    local glyphs = #mod.ui.Font.split(battle.enemy.name)
+    return 8 + (glyphs <= 2 and 16 or glyphs <= 4 and 8 or 0)
+  end
+
   local function drawCaughtIndicator(battle, state, context)
     local mode = optionValue(battle.game, "qol_caught_indicator")
     if mode ~= "grey" and mode ~= "red" then return end
@@ -57,11 +62,17 @@ function feature.install(mod, services)
        or not enemyHudVisible(battle, context.slide) then return end
     local image, quad = ballAsset()
     if not image then return end
-    local x, y
-    if battle:wideLayout() then
-      x, y = 112, 7
+    local x, y, scale
+    local voxel3dBattleData = context.voxel3dBattleData
+    local hudShake = battle.fx and battle.fx.hudShakeX or 0
+    if voxel3dBattleData then
+      scale = voxel3dBattleData.scale
+      x = (enemyNameX(battle) - 9) * scale
+      y = voxel3dBattleData.ly + 7 * scale
+      love.graphics.setCanvas(voxel3dBattleData.canvas)
+    elseif battle:wideLayout() then
+      x, y = 112 + context.sx, 7 + context.sy
     else
-      local hudShake = battle.fx and battle.fx.hudShakeX or 0
       x, y = 7 + context.sx + hudShake, 7 + context.sy
     end
     love.graphics.setShader()
@@ -70,8 +81,8 @@ function feature.install(mod, services)
     else
       love.graphics.setColor(1, 1, 1, 1)
     end
-    love.graphics.draw(image, quad, x, y)
-    PaletteFX.markTrueColor(x, y, 8, 8)
+    love.graphics.draw(image, quad, x, y, 0, scale or 1, scale or 1)
+    if not voxel3dBattleData then PaletteFX.markTrueColor(x, y, 8, 8) end
   end
 
   services.battle:add({

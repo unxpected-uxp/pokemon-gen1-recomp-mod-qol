@@ -18,8 +18,8 @@ local feature = {
   menu = {
     label = "LOCATION BANNERS",
     key = "qol_location_banners",
-    description = "SHOWS THE LOCATION\nNAME WHEN ENTERING\f"
-      .. "A NEW AREA.",
+    description = "SHOWS THE CURRENT\nLOCATION WHEN\f"
+      .. "ENTERING A NEW\nAREA.",
   },
 }
 
