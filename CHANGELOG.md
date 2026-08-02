@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Mapped controllers no longer receive duplicate raw joystick bindings that
+  could turn shoulder buttons into START or make START/Plus stop responding.
+
 ## v1.2.2
 
 ### Tested compatibility
