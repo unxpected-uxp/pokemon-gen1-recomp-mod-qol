@@ -159,9 +159,11 @@ function feature.install(mod, services)
       local game = mod.world.game
       if not enabled(game) or not game or not game.stack
          or game.stack:top() ~= ow then return false end
+      -- START must reach the base handler if one physical controller press
+      -- produced both a standardized START and a duplicate raw SELECT edge.
+      if game.input:wasPressed("start") then return false end
       if not game.input:wasPressed("select") then return false end
-      openSelectFieldMoves(ow)
-      return true
+      return openSelectFieldMoves(ow)
     end
   end
 

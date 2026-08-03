@@ -9,6 +9,32 @@ Data:load()
 local Font = require("src.render.Font")
 Font.load(Data)
 
+-- Give the mod's overworld-input wrapper a minimal base handler. This keeps
+-- the feature tests focused on whether QoL consumes an edge or passes it on,
+-- without constructing a complete live OverworldState.
+local OverworldController = require("src.world.OverworldController")
+local originalOverworldHandleInput = OverworldController.handleInput
+local baseInputCalls = 0
+OverworldController.handleInput = function()
+  baseInputCalls = baseInputCalls + 1
+end
+
+-- Recreate Gen1Recomp 0.1.41-0.1.57's raw-input behavior even when these
+-- tests run against an engine checkout that already contains the upstream
+-- guard. The mod must remain independently capable of protecting released
+-- builds that users already have installed.
+local EngineInput = require("src.core.Input")
+local rawInputMethods = {}
+for _, name in ipairs({
+  "joystickpressed", "joystickreleased", "joystickaxis", "joystickhat",
+}) do
+  local original = EngineInput[name]
+  rawInputMethods[name] = original
+  EngineInput[name] = function(self, _, ...)
+    return original(self, nil, ...)
+  end
+end
+
 local function read(path)
   local file = assert(io.open(path, "rb"))
   local source = file:read("*a")
@@ -21,6 +47,7 @@ for _, name in ipairs({
   "manifest.json",
   "main.lua",
   "qol_options.lua",
+  "qol_controller_compat.lua",
   "qol_battle_overlays.lua",
   "qol_feature_xp_bar.lua",
   "qol_feature_caught_indicator.lua",
@@ -37,6 +64,30 @@ T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
 local exports = run.loader.exports.quality_of_life
 T.check(exports and exports.screenId == "QualityOfLife",
   "exports the submenu screen id")
+
+-- Gen1Recomp 0.1.41+ sends raw joystick callbacks alongside standardized
+-- gamepad callbacks. A mapped Switch controller reports Plus as gamepad
+-- START and raw button 7; the engine's generic fallback otherwise adds
+-- SELECT, while raw button 10 turns L into START.
+local mappedPad = { isGamepad = function() return true end }
+EngineInput:init()
+EngineInput:gamepadpressed(mappedPad, "start")
+EngineInput:joystickpressed(mappedPad, 7)
+EngineInput:step()
+T.check(EngineInput:wasPressed("start")
+        and not EngineInput:wasPressed("select"),
+  "mapped controller Plus remains START without a duplicate raw SELECT")
+EngineInput:reset()
+EngineInput:joystickpressed(mappedPad, 10)
+EngineInput:step()
+T.check(not EngineInput:wasPressed("start"),
+  "mapped controller shoulder buttons do not become raw START")
+local rawPad = { isGamepad = function() return false end }
+EngineInput:reset()
+EngineInput:joystickpressed(rawPad, 10)
+EngineInput:step()
+T.check(EngineInput:wasPressed("start"),
+  "unmapped joystick fallback keeps its raw START binding")
 
 local loadChunk = loadstring or load
 local transform = assert(loadChunk(modFiles[
@@ -368,8 +419,14 @@ game.save.inventory.OLD_ROD = nil
 game.save.inventory.GOOD_ROD = nil
 game.save.inventory.SUPER_ROD = nil
 
-local OverworldController = require("src.world.OverworldController")
 local oldScreensPush = Screens.push
+local beforeStart = baseInputCalls
+input.pressed = { start = true, select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+T.eq(baseInputCalls, beforeStart + 1,
+  "START reaches the base handler despite a duplicate SELECT edge")
+
 local pushedScreen, pushedOpts
 Screens.push = function(_, id, opts)
   pushedScreen, pushedOpts = id, opts
@@ -796,5 +853,10 @@ T.check(bar == nil and ball == nil, "disabled options draw no overlays")
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle
 love.graphics.setColor(1, 1, 1, 1)
 run.release()
+for name, original in pairs(rawInputMethods) do
+  EngineInput[name] = original
+end
+rawset(EngineInput, "__qolMappedGamepadGuard", nil)
+OverworldController.handleInput = originalOverworldHandleInput
 Screens.invalidate()
 T.finish("qol later gen")
