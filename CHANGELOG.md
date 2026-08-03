@@ -13,7 +13,7 @@
 
 ### Fixed
 
-- No longer can fish while surfing
+- Can no longer fish while surfing
 - XP bar and caught indicator are correctly "shaking" during wide battles
 - XP bar and caught indicator are correctly positioned when using the "Voxel" Dramatic Shapes mod.
 

@@ -161,6 +161,12 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_exp_bar, "black",
   "right cycles the EXP bar to black")
 T.eq(menu.rows[1].value(game), "ON (BLACK)", "submenu refreshes the EXP label")
 menu.index = 2
+press(menu, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "gen2",
+  "right cycles the indicator to the Gen2 glyph")
+T.eq(menu.rows[2].value(game), "ON (Gen2)",
+  "submenu shows the Gen2 indicator label")
+press(menu, "left")
 press(menu, "left")
 T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "red",
   "left wraps the indicator from off to red")
@@ -170,7 +176,7 @@ press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
   "right enables Easy interactions")
 T.eq(menu.rows[3].value(game), "ON", "submenu refreshes Easy interactions")
-T.eq(writes, 3, "submenu changes persist immediately")
+T.eq(writes, 5, "submenu changes persist immediately")
 
 menu.index = 4
 press(menu, "right")
@@ -178,7 +184,7 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, 1,
   "right enables one-second location banners")
 T.eq(menu.rows[4].value(game), "ON (1 SECOND)",
   "submenu refreshes the one-second location banner mode")
-T.eq(writes, 4, "location banner changes persist immediately")
+T.eq(writes, 6, "location banner changes persist immediately")
 
 press(menu, "right")
 T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
@@ -618,6 +624,21 @@ battle:draw()
 T.check(ball and ball.x == 112 and ball.y == 7,
   "wide caught indicator aligns with the fixed enemy HUD")
 
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
+rectangles, ball = {}, nil
+battle:draw()
+local wideGen2Pixel
+for _, rectangle in ipairs(rectangles) do
+  if rectangle.x == 114 and rectangle.y == 9
+      and rectangle.w == 1 and rectangle.h == 1 then
+    wideGen2Pixel = rectangle
+    break
+  end
+end
+T.check(wideGen2Pixel and wideGen2Pixel.color[1] == 0,
+  "wide Gen2 indicator moves down one pixel and remains black")
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
+
 battle.fx = { shakeX = 2, shakeY = 3, hudShakeX = 4 }
 rectangles, ball = {}, nil
 battle:draw()
@@ -652,8 +673,26 @@ T.check(bar and bar.canvas == voxelCanvas and bar.x + bar.w == 641,
   "voxel EXP bar follows the player HUD to the right edge")
 T.check(bar.y == 267 and bar.h == 6,
   "voxel EXP bar uses framebuffer coordinates")
+
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
+rectangles, ball = {}, nil
+battle:draw()
+local voxelGen2Pixel
+for _, rectangle in ipairs(rectangles) do
+  if rectangle.x == 6 and rectangle.y == 27
+      and rectangle.w == 3 and rectangle.h == 3 then
+    voxelGen2Pixel = rectangle
+    break
+  end
+end
+T.check(voxelGen2Pixel and voxelGen2Pixel.canvas == voxelCanvas
+        and voxelGen2Pixel.color[1] == 1
+        and voxelGen2Pixel.color[2] == 1
+        and voxelGen2Pixel.color[3] == 1,
+  "voxel Gen2 indicator moves right and down and draws white")
 T.eq(love.graphics.getCanvas(), uiCanvas,
   "voxel overlays restore the engine UI canvas")
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
 battle.__qolDramaticShapeHudSnapped = false
 bar, ball = nil, nil
 battle:draw()
@@ -707,6 +746,45 @@ T.check(ball.color[1] == 1 and ball.color[2] == 1 and ball.color[3] == 1,
   "greyscale indicator applies no tint")
 
 game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
+rectangles, bar, ball = {}, nil, nil
+battle:draw()
+local gen2Pixels = {}
+local gen2Color
+for _, rectangle in ipairs(rectangles) do
+  if rectangle.w == 1 and rectangle.h == 1 then
+    gen2Pixels[rectangle.x .. "," .. rectangle.y] = true
+    gen2Color = rectangle.color
+  end
+end
+local expectedGen2Rows = {
+  "oooooooo",
+  "ooxxxxoo",
+  "oxxoxxxo",
+  "oxxxxxxo",
+  "oxooooxo",
+  "oxooooxo",
+  "ooxxxxoo",
+  "oooooooo",
+}
+local expectedGen2Pixels = 0
+for py, row in ipairs(expectedGen2Rows) do
+  for px = 1, 8 do
+    if row:sub(px, px) == "x" then
+      expectedGen2Pixels = expectedGen2Pixels + 1
+      T.check(gen2Pixels[(7 + px) .. "," .. (7 + py)],
+        "Gen2 indicator includes pixel " .. px .. "," .. py)
+    end
+  end
+end
+local gen2PixelCount = 0
+for _ in pairs(gen2Pixels) do gen2PixelCount = gen2PixelCount + 1 end
+T.eq(gen2PixelCount, expectedGen2Pixels,
+  "Gen2 indicator contains only the supplied glyph pixels")
+T.check(gen2Color and gen2Color[1] == 0 and gen2Color[2] == 0
+        and gen2Color[3] == 0,
+  "classic Gen2 indicator moves right and down and draws black")
+
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 bar, ball = nil, nil
 local baseDrawsBeforeDisabled = baseDraws
