@@ -480,10 +480,19 @@ while shown < 67 and guard < 100 do
 end
 T.check(neverWentBackwards and shown == 67,
   "a level-up fills the EXP bar before resetting it")
-for _ = 1, 30 do
+T.eq(levelUpState.expBurstFrame, 0,
+  "the Gen2 burst starts when the level-up bar becomes full")
+for frame = 1, 30 do
   levelUpBattle.frame = levelUpBattle.frame + 1
   T.eq(exports.animatedExpPixels(levelUpBattle, levelUpState), 67,
     "the full level-up bar remains visible during its hold")
+  if frame <= 7 then
+    T.eq(levelUpState.expBurstFrame, frame,
+      "the Gen2 burst advances through its eight frames")
+  elseif frame == 8 then
+    T.eq(levelUpState.expBurstFrame, nil,
+      "the Gen2 burst ends after eight frames")
+  end
 end
 levelUpBattle.frame = levelUpBattle.frame + 1
 T.eq(exports.animatedExpPixels(levelUpBattle, levelUpState), 0,
@@ -500,6 +509,55 @@ T.eq(exports.expPixels(maxBattle), 67,
   "a max-level Pokemon always has a full EXP bar")
 T.eq(exports.animatedExpPixels(maxBattle, {}), 67,
   "the animated max-level EXP bar starts full")
+local maxState = {}
+exports.animatedExpPixels(maxBattle, maxState)
+T.eq(maxState.expBurstFrame, nil,
+  "an initially max-level Pokemon does not play the level-up burst")
+
+local capStart = levelCap - 2
+local capCurrent = Growth.expForLevel(playerDef.growthRate, capStart)
+local capNext = Growth.expForLevel(playerDef.growthRate, capStart + 1)
+local multiLevelMon = {
+  species = "BULBASAUR", level = capStart,
+  exp = math.floor((capCurrent + capNext) / 2),
+}
+local multiLevelBattle = {
+  data = Data, frame = 0, player = { mon = multiLevelMon },
+}
+local multiLevelState = {}
+local multiShown = exports.animatedExpPixels(multiLevelBattle, multiLevelState)
+multiLevelMon.level = levelCap
+multiLevelMon.exp = Growth.expForLevel(playerDef.growthRate, levelCap)
+local multiGuard = 0
+while multiShown < 67 and multiGuard < 100 do
+  multiLevelBattle.frame = multiLevelBattle.frame + 1
+  multiShown = exports.animatedExpPixels(multiLevelBattle, multiLevelState)
+  multiGuard = multiGuard + 1
+end
+T.eq(multiShown, 67, "the first multi-level cycle reaches a full bar")
+T.eq(multiLevelState.expLevelCycles, 2,
+  "a two-level gain queues two full-bar cycles")
+for _ = 1, 31 do
+  multiLevelBattle.frame = multiLevelBattle.frame + 1
+  multiShown = exports.animatedExpPixels(multiLevelBattle, multiLevelState)
+end
+T.eq(multiShown, 0,
+  "a multi-level gain resets for another cycle even at the level cap")
+multiGuard = 0
+while multiShown < 67 and multiGuard < 100 do
+  multiLevelBattle.frame = multiLevelBattle.frame + 1
+  multiShown = exports.animatedExpPixels(multiLevelBattle, multiLevelState)
+  multiGuard = multiGuard + 1
+end
+T.eq(multiShown, 67, "the second multi-level cycle reaches a full bar")
+T.eq(multiLevelState.expBurstFrame, 0,
+  "each level gained plays its own Gen2 burst")
+for _ = 1, 31 do
+  multiLevelBattle.frame = multiLevelBattle.frame + 1
+  multiShown = exports.animatedExpPixels(multiLevelBattle, multiLevelState)
+end
+T.check(multiShown == 67 and multiLevelState.expPhase == nil,
+  "the final level-cap cycle finishes with a full bar")
 
 local baseDraws = 0
 local battle = {
@@ -533,6 +591,22 @@ love.graphics.rectangle = function(mode, x, y, w, h)
   }
   if rectangles then rectangles[#rectangles + 1] = bar end
 end
+
+rectangles = {}
+exports.drawExpBurst(7, 80, 90, 1, { 0, 0, 0, 1 }, true)
+local burstMinX, burstMaxX, burstMinY, burstMaxY
+for _, rectangle in ipairs(rectangles) do
+  burstMinX = math.min(burstMinX or rectangle.x, rectangle.x)
+  burstMaxX = math.max(burstMaxX or rectangle.x, rectangle.x)
+  burstMinY = math.min(burstMinY or rectangle.y, rectangle.y)
+  burstMaxY = math.max(burstMaxY or rectangle.y, rectangle.y)
+end
+T.eq(#rectangles, 192,
+  "the Gen2 burst draws eight copies of its twenty-four-pixel particle")
+T.check(burstMinX == 63 and burstMaxX == 96
+        and burstMinY == 73 and burstMaxY == 106,
+  "the final Gen2 burst frame expands fourteen pixels from the bar end")
+rectangles = nil
 
 Runtime.emit("battle.started", {
   battle = battle, kind = "wild", species = "RATTATA", level = 5,

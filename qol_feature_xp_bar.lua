@@ -1,7 +1,8 @@
 local EXP_X, EXP_Y, EXP_WIDTH = 80, 89, 67
 local WIDE_EXP_X, WIDE_EXP_Y, WIDE_EXP_SEGMENTS = 208, 88, 10
 local EXP_LEVEL_HOLD_FRAMES = 30
-local EXP_BLUE = { 56 / 255, 144 / 255, 240 / 255, 1 }
+local EXP_BURST_DIAGONALS = { 0, 1, 2, 4, 5, 7, 8, 9 }
+local EXP_BLUE = { 50 / 255, 150 / 255, 250 / 255, 1 }
 local EXP_BLACK = { 0, 0, 0, 1 }
 -- manually create the first tile of XP: (like HP:)
 local XP_TILE_ROWS = {
@@ -12,6 +13,17 @@ local XP_TILE_ROWS = {
   "ooxxooxx",
   "oxoxxoxx",
   "oooooooo",
+  "oooooooo",
+}
+-- manually create the particle for the level up xp bar burst animation
+local EXP_BURST_TILE_ROWS = {
+  "oooooooo",
+  "oooxxooo",
+  "ooxxxxoo",
+  "oxxxxxxo",
+  "oxxxxxxo",
+  "ooxxxxoo",
+  "oooxxooo",
   "oooooooo",
 }
 
@@ -67,6 +79,7 @@ function feature.install(mod, services)
       state.expLevel = mon and mon.level
       state.expPhase = nil
       state.expLevelCycles = 0
+      state.expBurstFrame = nil
       state.expFrame = battle.frame
       return target
     end
@@ -87,21 +100,31 @@ function feature.install(mod, services)
       if state.expPixels == EXP_WIDTH then
         state.expPhase = "hold_level"
         state.expHoldFrames = EXP_LEVEL_HOLD_FRAMES
+        state.expBurstFrame = 0
       end
     elseif state.expPhase == "hold_level" then
+      if state.expBurstFrame then
+        if state.expBurstFrame < #EXP_BURST_DIAGONALS - 1 then
+          state.expBurstFrame = state.expBurstFrame + 1
+        else
+          state.expBurstFrame = nil
+        end
+      end
       if state.expHoldFrames > 0 then
         state.expHoldFrames = state.expHoldFrames - 1
       else
         state.expLevelCycles = math.max(0, (state.expLevelCycles or 1) - 1)
         local cap = battle.data.constants and battle.data.constants.levelCap or 100
-        if mon and mon.level >= cap then
+        state.expBurstFrame = nil
+        if state.expLevelCycles > 0 then
+          state.expPixels = 0
+          state.expPhase = "fill_level"
+        elseif mon and mon.level >= cap then
           state.expPhase = nil
           state.expPixels = EXP_WIDTH
-          state.expLevelCycles = 0
         else
           state.expPixels = 0
-          state.expPhase = state.expLevelCycles > 0 and "fill_level"
-                                                     or "after_level"
+          state.expPhase = "after_level"
         end
       end
     elseif state.expPhase == "after_level" then
@@ -148,6 +171,39 @@ function feature.install(mod, services)
         end
       end
     end
+  end
+
+  local function drawExpBurst(frame, centerX, centerY, scale, color, mark)
+    if frame == nil then return end
+    local g = love.graphics
+    local radius = frame * 2 * scale
+    local diagonal = EXP_BURST_DIAGONALS[frame + 1] * scale
+
+    local function particle(dx, dy)
+      local x = centerX + dx - 4 * scale
+      local y = centerY + dy - 4 * scale
+      for py, row in ipairs(EXP_BURST_TILE_ROWS) do
+        for px = 1, 8 do
+          if row:sub(px, px) == "x" then
+            local dotX = x + (px - 1) * scale
+            local dotY = y + (py - 1) * scale
+            g.rectangle("fill", dotX, dotY, scale, scale)
+            if mark then PaletteFX.markTrueColor(dotX, dotY, scale, scale) end
+          end
+        end
+      end
+    end
+
+    g.setShader()
+    g.setColor(color[1], color[2], color[3], color[4])
+    particle(radius, 0)
+    particle(diagonal, diagonal)
+    particle(0, radius)
+    particle(-diagonal, diagonal)
+    particle(-radius, 0)
+    particle(-diagonal, -diagonal)
+    particle(0, -radius)
+    particle(diagonal, -diagonal)
   end
 
   local function drawWideExpBar(px, color, sx, sy)
@@ -217,10 +273,17 @@ function feature.install(mod, services)
       love.graphics.setColor(color[1], color[2], color[3], color[4])
       love.graphics.rectangle(
         "fill", x, voxel3dBattleData.ly + EXP_Y * scale, width, 2 * scale)
+      drawExpBurst(state.expBurstFrame,
+        voxel3dBattleData.pw - (13 + EXP_WIDTH) * scale,
+        voxel3dBattleData.ly + (EXP_Y + 1) * scale,
+        scale, color, false)
       return
     end
     if battle:wideLayout() then
       drawWideExpBar(px, color, context.sx, context.sy)
+      drawExpBurst(state.expBurstFrame,
+        WIDE_EXP_X + WIDE_EXP_SEGMENTS * 8, WIDE_EXP_Y + 4,
+        1, color, true)
       return
     end
     if px <= 0 then return end
@@ -232,6 +295,8 @@ function feature.install(mod, services)
     love.graphics.setColor(color[1], color[2], color[3], color[4])
     love.graphics.rectangle("fill", x, y, px, 2)
     PaletteFX.markTrueColor(x, y, px, 2)
+    drawExpBurst(state.expBurstFrame,
+      EXP_X, EXP_Y + 1, 1, color, true)
   end
 
   services.battle:add({
@@ -240,6 +305,7 @@ function feature.install(mod, services)
   })
   mod.exports.expPixels = expPixels
   mod.exports.animatedExpPixels = animatedExpPixels
+  mod.exports.drawExpBurst = drawExpBurst
 end
 
 return feature
