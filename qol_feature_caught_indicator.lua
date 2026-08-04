@@ -1,13 +1,22 @@
-local DERIVED_BALL = "save/mod-derived/quality_of_life/ui/ball.png"
+local BALL_ROWS = {
+  "ooxxxoo",
+  "oxdddxo",
+  "xdldddx",
+  "xdddddx",
+  "xlllllx",
+  "oxlllxo",
+  "ooxxxoo",
+}
 local GEN2_BALL_ROWS = {
-  "oooooooo",
-  "ooxxxxoo",
-  "oxxoxxxo",
-  "oxxxxxxo",
-  "oxooooxo",
-  "oxooooxo",
-  "ooxxxxoo",
-  "oooooooo",
+  "oxxxxo",
+  "xxoxxx",
+  "xxxxxx",
+  "xoooox",
+  "xoooox",
+  "oxxxxo",
+}
+local RED_BALL_COLORS = {
+  { 255, 255, 255 }, { 255, 132, 132 }, { 148, 58, 58 }, { 0, 0, 0 },
 }
 
 local feature = {
@@ -19,8 +28,8 @@ local feature = {
     choices = {
       { "OFF", "off" },
       { "ON (Gen2)", "gen2" },
-      { "ON (GREY)", "grey" },
       { "ON (RED)", "red" },
+      { "ON (GREY)", "grey" },
     },
   },
   menu = {
@@ -35,23 +44,6 @@ local feature = {
 function feature.install(mod, services)
   local PaletteFX = require("src.render.PaletteFX")
   local optionValue = services.options.value
-  local ballImage, ballQuad
-  local gen2BallImage
-
-  local function ballAsset()
-    if ballImage == false then return nil end
-    if not ballImage then
-      local ok, image = pcall(love.graphics.newImage, DERIVED_BALL)
-      if not ok then
-        ballImage = false
-        mod.log:warn("caught indicator unavailable: %s", tostring(image))
-        return nil
-      end
-      ballImage = image
-      ballQuad = love.graphics.newQuad(0, 0, 8, 8, image:getDimensions())
-    end
-    return ballImage, ballQuad
-  end
 
   local function enemyHudVisible(battle, slide)
     return battle.enemy and not battle.showEnemyTrainer
@@ -65,38 +57,23 @@ function feature.install(mod, services)
     return 8 + (glyphs <= 2 and 16 or glyphs <= 4 and 8 or 0)
   end
 
-  local function drawGen2Ball(x, y, scale, white)
+  local function indicatorColors(battle, colors)
+    local bgp = battle.activeBgp and battle:activeBgp()
+    return PaletteFX.effectiveColors(PaletteFX.permute(colors, bgp))
+  end
+
+  local function drawBallRows(rows, x, y, scale, colors, mark)
     local g = love.graphics
     scale = scale or 1
-    if gen2BallImage == nil then
-      gen2BallImage = false
-      if love.image and love.image.newImageData and g.newImage then
-        local data = love.image.newImageData(8, 8)
-        for py, row in ipairs(GEN2_BALL_ROWS) do
-          for px = 1, 8 do
-            if row:sub(px, px) == "x" then
-              data:setPixel(px - 1, py - 1, 1, 1, 1, 1)
-            end
-          end
-        end
-        gen2BallImage = g.newImage(data)
-        gen2BallImage:setFilter("nearest", "nearest")
-      end
-    end
-    local color = white and 1 or 0
-    if gen2BallImage then
-      g.setColor(color, color, color, 1)
-      g.draw(gen2BallImage, x, y, 0, scale, scale)
-      return
-    end
-
-    -- Headless test stubs cannot construct ImageData; draw the same glyph.
-    g.setColor(color, color, color, 1)
-    for py, row in ipairs(GEN2_BALL_ROWS) do
-      for px = 1, 8 do
-        if row:sub(px, px) == "x" then
-          g.rectangle("fill", x + (px - 1) * scale,
-            y + (py - 1) * scale, scale, scale)
+    for py, row in ipairs(rows) do
+      for px = 1, #row do
+        local color = colors[row:sub(px, px)]
+        if color then
+          local dotX = x + (px - 1) * scale
+          local dotY = y + (py - 1) * scale
+          g.setColor(color[1] / 255, color[2] / 255, color[3] / 255, 1)
+          g.rectangle("fill", dotX, dotY, scale, scale)
+          if mark then PaletteFX.markTrueColor(dotX, dotY, scale, scale) end
         end
       end
     end
@@ -115,29 +92,38 @@ function feature.install(mod, services)
       scale = voxel3dBattleData.scale
       x = (enemyNameX(battle) - 9) * scale
       y = voxel3dBattleData.ly + 7 * scale
-      if mode == "gen2" then x, y = x + scale, y + scale end
+      if mode == "gen2" then x, y = x + 2 * scale, y + 2 * scale end
       love.graphics.setCanvas(voxel3dBattleData.canvas)
     elseif battle:wideLayout() then
       x, y = 112 + context.sx, 7 + context.sy
-      if mode == "gen2" then y = y + 1 end
+      if mode == "gen2" then x, y = x + 1, y + 2 end
     else
       x, y = 7 + context.sx + hudShake, 7 + context.sy
-      if mode == "gen2" then x, y = x + 1, y + 1 end
+      if mode == "gen2" then x, y = x + 2, y + 2 end
+    end
+    if mode ~= "gen2" then
+      local offset = scale or 1
+      x, y = x + offset, y + offset
     end
     love.graphics.setShader()
+    local colors
     if mode == "gen2" then
-      drawGen2Ball(x, y, scale, voxel3dBattleData ~= nil)
+      local white = voxel3dBattleData or PaletteFX.mode == "gbc_inv"
+      colors = { x = white and { 255, 255, 255 } or { 0, 0, 0 } }
     else
-      local image, quad = ballAsset()
-      if not image then return end
-      if mode == "red" then
-        love.graphics.setColor(1, 0, 0, 1)
-      else
-        love.graphics.setColor(1, 1, 1, 1)
-      end
-      love.graphics.draw(image, quad, x, y, 0, scale or 1, scale or 1)
+      local palette = indicatorColors(
+        battle, mode == "red" and RED_BALL_COLORS or PaletteFX.GRAYS)
+      local white = { 255, 255, 255 }
+      local black = { 0, 0, 0 }
+      colors = {
+        x = voxel3dBattleData and white
+          or PaletteFX.mode == "og_inv" and black or palette[4],
+        d = palette[3],
+        l = palette[2],
+      }
     end
-    if not voxel3dBattleData then PaletteFX.markTrueColor(x, y, 8, 8) end
+    drawBallRows(mode == "gen2" and GEN2_BALL_ROWS or BALL_ROWS,
+      x, y, scale, colors, voxel3dBattleData == nil)
   end
 
   services.battle:add({

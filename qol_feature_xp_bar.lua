@@ -33,10 +33,15 @@ local feature = {
     label = "BATTLE EXP BAR",
     type = "choice",
     default = "off",
+    aliases = {
+      [false] = "off",
+      [true] = "on",
+      black = "on",
+      blue = "on",
+    },
     choices = {
       { "OFF", "off" },
-      { "ON (BLACK)", "black" },
-      { "ON (BLUE)", "blue" },
+      { "ON", "on" },
     },
   },
   menu = {
@@ -53,6 +58,17 @@ function feature.install(mod, services)
   local HudTiles = require("src.render.HudTiles")
   local PaletteFX = require("src.render.PaletteFX")
   local optionValue = services.options.value
+
+  local function paletteExpColor(battle)
+    local colors = battle.zoneColorsAt
+      and battle:zoneColorsAt(EXP_X, EXP_Y)
+    if not colors then return EXP_BLACK end
+    local bgp = battle.activeBgp and battle:activeBgp()
+    colors = PaletteFX.effectiveColors(PaletteFX.permute(colors, bgp))
+    local color = colors and colors[3]
+    if not color then return EXP_BLACK end
+    return { color[1] / 255, color[2] / 255, color[3] / 255, 1 }
+  end
 
   local function expPixels(battle)
     local mon = battle.player and battle.player.mon
@@ -254,8 +270,11 @@ function feature.install(mod, services)
 
   local function drawExpBar(battle, state, context)
     local mode = optionValue(battle.game, "qol_exp_bar")
-    if mode ~= "black" and mode ~= "blue" then return end
-    local color = mode == "black" and EXP_BLACK or EXP_BLUE
+    if mode ~= "on" then return end
+    local colorMode = PaletteFX.mode
+    local blue = colorMode == "ogred" or colorMode == "gbc"
+      or colorMode == "redpp"
+    local color = blue and EXP_BLUE or paletteExpColor(battle)
     if not battle.player or battle.safari or battle.demo
        or battle.showPlayerBack or context.slide ~= 0 then return end
     local px = animatedExpPixels(battle, state)

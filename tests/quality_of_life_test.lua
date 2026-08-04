@@ -26,7 +26,6 @@ for _, name in ipairs({
   "qol_feature_caught_indicator.lua",
   "qol_feature_easy_interactions.lua",
   "qol_feature_location_banners.lua",
-  "transforms.lua",
 }) do
   modFiles["mods/quality_of_life/" .. name] =
     read("mods/quality_of_life/" .. name)
@@ -37,25 +36,6 @@ T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
 local exports = run.loader.exports.quality_of_life
 T.check(exports and exports.screenId == "QualityOfLife",
   "exports the submenu screen id")
-
-local loadChunk = loadstring or load
-local transform = assert(loadChunk(modFiles[
-  "mods/quality_of_life/transforms.lua"]))()
-local transformCalls = {}
-transform({
-  exists = function(path) return path == "battle/balls.png" end,
-  readImage = function(path) transformCalls.read = path return {} end,
-  blank = function(w, h) transformCalls.blank = { w, h } return {} end,
-  blit = function(_, _, dx, dy, sx, sy, w, h)
-    transformCalls.blit = { dx, dy, sx, sy, w, h }
-  end,
-  writeImage = function(_, path) transformCalls.write = path end,
-})
-T.eq(transformCalls.read, "battle/balls.png", "transform reads the ball sheet")
-T.check(transformCalls.blank[1] == 8 and transformCalls.blank[2] == 8
-        and transformCalls.blit[5] == 8 and transformCalls.blit[6] == 8,
-  "transform crops the first 8x8 ball tile")
-T.eq(transformCalls.write, "ui/ball.png", "transform writes only derived art")
 
 local function stack()
   local s = { states = {} }
@@ -157,26 +137,32 @@ Runtime.emit("world.interacted", { kind = "npc", target = facingNpc })
 T.eq(strengthChecks, 0, "a boulder interaction does nothing while Auto HM use is off")
 
 press(menu, "right")
-T.eq(game.save.options.modOptions.quality_of_life.qol_exp_bar, "black",
-  "right cycles the EXP bar to black")
-T.eq(menu.rows[1].value(game), "ON (BLACK)", "submenu refreshes the EXP label")
+T.eq(game.save.options.modOptions.quality_of_life.qol_exp_bar, "on",
+  "right enables the EXP bar")
+T.eq(menu.rows[1].value(game), "ON", "submenu refreshes the EXP label")
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "black"
+T.eq(menu.rows[1].value(game), "ON",
+  "legacy black EXP mode uses the adaptive enabled mode")
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "blue"
+T.eq(menu.rows[1].value(game), "ON",
+  "legacy blue EXP mode uses the adaptive enabled mode")
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "on"
 menu.index = 2
 press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "gen2",
   "right cycles the indicator to the Gen2 glyph")
 T.eq(menu.rows[2].value(game), "ON (Gen2)",
   "submenu shows the Gen2 indicator label")
-press(menu, "left")
-press(menu, "left")
+press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "red",
-  "left wraps the indicator from off to red")
+  "right cycles the indicator from Gen2 to red")
 T.eq(menu.rows[2].value(game), "ON (RED)", "submenu refreshes the indicator label")
 menu.index = 3
 press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
   "right enables Easy interactions")
 T.eq(menu.rows[3].value(game), "ON", "submenu refreshes Easy interactions")
-T.eq(writes, 5, "submenu changes persist immediately")
+T.eq(writes, 4, "submenu changes persist immediately")
 
 menu.index = 4
 press(menu, "right")
@@ -184,7 +170,7 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, 1,
   "right enables one-second location banners")
 T.eq(menu.rows[4].value(game), "ON (1 SECOND)",
   "submenu refreshes the one-second location banner mode")
-T.eq(writes, 6, "location banner changes persist immediately")
+T.eq(writes, 5, "location banner changes persist immediately")
 
 press(menu, "right")
 T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
@@ -573,23 +559,33 @@ local battle = {
 }
 
 local oldDraw, oldRectangle = love.graphics.draw, love.graphics.rectangle
-local ball, bar, draws, rectangles
+local bar, draws, rectangles
 love.graphics.draw = function(_, quad, x, y, rotation, scaleX, scaleY)
   if y == nil then quad, x, y = nil, quad, x end
   local r, g, b = love.graphics.getColor()
-  ball = {
+  local draw = {
     quad = quad, x = x, y = y, scaleX = scaleX, scaleY = scaleY,
     canvas = love.graphics.getCanvas(), color = { r, g, b },
   }
-  if draws then draws[#draws + 1] = ball end
+  if draws then draws[#draws + 1] = draw end
 end
 love.graphics.rectangle = function(mode, x, y, w, h)
   local r, g, b = love.graphics.getColor()
-  bar = {
+  local rectangle = {
     mode = mode, x = x, y = y, w = w, h = h,
     canvas = love.graphics.getCanvas(), color = { r, g, b },
   }
-  if rectangles then rectangles[#rectangles + 1] = bar end
+  if h == 2 or h == 6 then bar = rectangle end
+  if rectangles then rectangles[#rectangles + 1] = rectangle end
+end
+
+local function rectangleAt(x, y, w, h)
+  for _, rectangle in ipairs(rectangles or {}) do
+    if rectangle.x == x and rectangle.y == y
+        and rectangle.w == (w or 1) and rectangle.h == (h or 1) then
+      return rectangle
+    end
+  end
 end
 
 rectangles = {}
@@ -613,28 +609,41 @@ Runtime.emit("battle.started", {
 })
 battle.fx = { shakeX = 2, shakeY = 3 }
 battle.introBalls = true
+rectangles = {}
 battle:draw()
 T.eq(baseDraws, 1, "wrapped draw runs during the wild intro")
-T.eq(ball, nil, "caught indicator stays hidden during the wild intro")
+T.eq(rectangleAt(12, 11), nil,
+  "caught indicator stays hidden during the wild intro")
 
-battle.introBalls, bar = nil, nil
+battle.introBalls, bar, rectangles = nil, nil, {}
 battle:draw()
 T.eq(baseDraws, 2, "wrapped draw calls the base renderer once per frame")
 T.check(bar and bar.y == 92 and bar.h == 2,
   "enabled EXP bar follows screen shake")
 T.eq(bar.x, 80 + 67 - exports.expPixels(battle) + 2,
   "EXP bar fills right-to-left")
-T.check(bar.color[1] == 0 and bar.color[2] == 0 and bar.color[3] == 0,
-  "black EXP mode draws black")
-T.check(ball and ball.x == 9 and ball.y == 10,
+T.check(bar.color[1] == 50 / 255 and bar.color[2] == 150 / 255
+        and bar.color[3] == 250 / 255,
+  "SGB color mode draws the EXP bar blue")
+local redBlack = rectangleAt(12, 11)
+local redDark = rectangleAt(12, 12)
+local redLight = rectangleAt(12, 13)
+T.check(redBlack and redDark and redLight,
   "caught indicator follows screen shake")
-T.check(ball.color[1] == 1 and ball.color[2] == 0 and ball.color[3] == 0,
-  "red indicator mode draws red")
+T.check(redBlack.color[1] == 0 and redBlack.color[2] == 0
+        and redBlack.color[3] == 0,
+  "red indicator draws a black outline")
+T.check(redDark.color[1] == 148 / 255 and redDark.color[2] == 58 / 255
+        and redDark.color[3] == 58 / 255,
+  "red indicator draws its dark red shade")
+T.check(redLight.color[1] == 1 and redLight.color[2] == 132 / 255
+        and redLight.color[3] == 132 / 255,
+  "red indicator draws its light red shade")
 
 local classicPixels = bar.w
 battle.wideLayout = function() return true end
 battle.phase, battle.fx, draws, rectangles = "moveSelect", nil, {}, {}
-game.save.options.modOptions.quality_of_life.qol_exp_bar = "blue"
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "on"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
 battle:draw()
 local extension, wideFill
@@ -651,9 +660,9 @@ for _, rectangle in ipairs(rectangles) do
 end
 T.check(extension,
   "wide EXP bar extends the player HUD by one row")
-T.check(wideFill and wideFill.color[1] == 56 / 255
-        and wideFill.color[2] == 144 / 255
-        and wideFill.color[3] == 240 / 255,
+T.check(wideFill and wideFill.color[1] == 50 / 255
+        and wideFill.color[2] == 150 / 255
+        and wideFill.color[3] == 250 / 255,
   "wide EXP bar uses the configured fill color")
 local expectedGlyph = {
   "193,90", "194,90", "196,90", "198,90", "199,90",
@@ -689,17 +698,17 @@ for x = 200, 288, 8 do
 end
 battle.wideLayout = function() return false end
 battle.phase = nil
-game.save.options.modOptions.quality_of_life.qol_exp_bar = "black"
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "on"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
-draws, rectangles = nil, nil
+draws, rectangles = nil, {}
 battle.wideLayout = function() return true end
-ball = nil
 battle:draw()
-T.check(ball and ball.x == 112 and ball.y == 7,
+T.check(rectangleAt(115, 8) and rectangleAt(115, 9)
+        and rectangleAt(115, 10),
   "wide caught indicator aligns with the fixed enemy HUD")
 
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
-rectangles, ball = {}, nil
+rectangles = {}
 battle:draw()
 local wideGen2Pixel
 for _, rectangle in ipairs(rectangles) do
@@ -710,11 +719,11 @@ for _, rectangle in ipairs(rectangles) do
   end
 end
 T.check(wideGen2Pixel and wideGen2Pixel.color[1] == 0,
-  "wide Gen2 indicator moves down one pixel and remains black")
+  "the resized wide Gen2 indicator preserves its visible alignment")
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
 
 battle.fx = { shakeX = 2, shakeY = 3, hudShakeX = 4 }
-rectangles, ball = {}, nil
+rectangles = {}
 battle:draw()
 local shakenExtension, shakenWideFill
 for _, rectangle in ipairs(rectangles) do
@@ -727,7 +736,7 @@ for _, rectangle in ipairs(rectangles) do
 end
 T.check(shakenExtension and shakenWideFill,
   "wide EXP bar follows battle screen shake")
-T.check(ball and ball.x == 114 and ball.y == 10,
+T.check(rectangleAt(117, 11),
   "wide caught indicator follows battle screen shake")
 battle.wideLayout = function() return false end
 
@@ -737,19 +746,26 @@ battle.dramaticShapeShot = {
   canvas = voxelCanvas, scale = 3, pw = 680, ph = 432, lx = 100, ly = 0,
 }
 love.graphics.setCanvas(uiCanvas)
-bar, ball = nil, nil
+bar, rectangles = nil, {}
 battle:draw()
-T.check(ball and ball.canvas == voxelCanvas and ball.x == -3 and ball.y == 21,
-  "voxel caught indicator sits one logical pixel left of the enemy name")
-T.check(ball.scaleX == 3 and ball.scaleY == 3,
+local voxelRedOutline = rectangleAt(6, 24, 3, 3)
+local voxelRedDark = rectangleAt(6, 27, 3, 3)
+local voxelRedLight = rectangleAt(6, 30, 3, 3)
+T.check(voxelRedOutline and voxelRedOutline.canvas == voxelCanvas
+        and voxelRedDark and voxelRedLight,
+  "voxel caught indicator applies its one-pixel position offset")
+T.check(voxelRedOutline.w == 3 and voxelRedOutline.h == 3,
   "voxel caught indicator uses framebuffer scale")
+T.check(voxelRedOutline.color[1] == 1 and voxelRedOutline.color[2] == 1
+        and voxelRedOutline.color[3] == 1,
+  "voxel caught indicator draws a white outline")
 T.check(bar and bar.canvas == voxelCanvas and bar.x + bar.w == 641,
   "voxel EXP bar follows the player HUD to the right edge")
 T.check(bar.y == 267 and bar.h == 6,
   "voxel EXP bar uses framebuffer coordinates")
 
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
-rectangles, ball = {}, nil
+rectangles = {}
 battle:draw()
 local voxelGen2Pixel
 for _, rectangle in ipairs(rectangles) do
@@ -768,9 +784,10 @@ T.eq(love.graphics.getCanvas(), uiCanvas,
   "voxel overlays restore the engine UI canvas")
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
 battle.__qolDramaticShapeHudSnapped = false
-bar, ball = nil, nil
+bar, rectangles = nil, {}
 battle:draw()
-T.check(ball and ball.canvas == uiCanvas and ball.x == 13 and ball.y == 10,
+local fallbackRedPixel = rectangleAt(16, 11)
+T.check(fallbackRedPixel and fallbackRedPixel.canvas == uiCanvas,
   "voxel HUD fallback uses classic caught-indicator shake")
 T.check(bar and bar.canvas == uiCanvas and bar.x + bar.w == 149,
   "voxel HUD fallback uses classic EXP-bar shake")
@@ -809,19 +826,60 @@ T.check(bar and bar.x == 128 and bar.x + bar.w == 147,
   "the Mimic menu covers only the overlapping part of the EXP bar")
 battle.phase, battle.player.mon = nil, originalMon
 
-game.save.options.modOptions.quality_of_life.qol_exp_bar = "blue"
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "on"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "grey"
-battle.fx, bar, ball = nil, nil, nil
+battle.fx, bar, rectangles = nil, nil, {}
 battle.frame = 3
 battle:draw()
-T.check(bar.color[1] == 56 / 255 and bar.color[2] == 144 / 255
-        and bar.color[3] == 240 / 255, "blue EXP mode draws blue")
-T.check(ball.color[1] == 1 and ball.color[2] == 1 and ball.color[3] == 1,
-  "greyscale indicator applies no tint")
+T.check(bar.color[1] == 50 / 255 and bar.color[2] == 150 / 255
+        and bar.color[3] == 250 / 255,
+  "SGB color mode draws the enabled EXP bar blue")
+local greyDark = rectangleAt(10, 9)
+local greyLight = rectangleAt(10, 10)
+T.check(greyDark and greyDark.color[1] == 85 / 255
+        and greyDark.color[2] == 85 / 255
+        and greyDark.color[3] == 85 / 255,
+  "grey indicator draws its dark shade")
+T.check(greyLight and greyLight.color[1] == 170 / 255
+        and greyLight.color[2] == 170 / 255
+        and greyLight.color[3] == 170 / 255,
+  "grey indicator draws its light shade")
+
+local currentPalette = {
+  { 255, 255, 255 }, { 180, 120, 60 }, { 20, 100, 220 }, { 0, 0, 0 },
+}
+local PaletteFX = require("src.render.PaletteFX")
+local originalExpColorMode = PaletteFX.mode
+local oldZoneColorsAt = rawget(battle, "zoneColorsAt")
+battle.zoneColorsAt = function() return currentPalette end
+for _, colorMode in ipairs({ "classic", "og", "og_inv", "gbc_inv" }) do
+  PaletteFX.setMode(colorMode)
+  local currentColor = PaletteFX.effectiveColors(currentPalette)[3]
+  battle.frame, bar = battle.frame + 1, nil
+  battle:draw()
+  T.check(bar and bar.color[1] == currentColor[1] / 255
+          and bar.color[2] == currentColor[2] / 255
+          and bar.color[3] == currentColor[3] / 255,
+    colorMode .. " color mode uses the current palette for the EXP bar")
+end
+for _, colorMode in ipairs({ "ogred", "gbc", "redpp" }) do
+  PaletteFX.setMode(colorMode)
+  battle.frame, bar = battle.frame + 1, nil
+  battle:draw()
+  T.check(bar and bar.color[1] == 50 / 255
+          and bar.color[2] == 150 / 255
+          and bar.color[3] == 250 / 255,
+    colorMode .. " color mode uses the blue EXP bar")
+end
+game.save.options.modOptions.quality_of_life.qol_exp_bar = "on"
+PaletteFX.setMode(originalExpColorMode)
+battle.zoneColorsAt = oldZoneColorsAt
 
 game.save.options.modOptions.quality_of_life.qol_exp_bar = "off"
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "gen2"
-rectangles, bar, ball = {}, nil, nil
+PaletteFX.clearTrueColor()
+PaletteFX.setPass("ui")
+rectangles, bar = {}, nil
 battle:draw()
 local gen2Pixels = {}
 local gen2Color
@@ -832,21 +890,19 @@ for _, rectangle in ipairs(rectangles) do
   end
 end
 local expectedGen2Rows = {
-  "oooooooo",
-  "ooxxxxoo",
-  "oxxoxxxo",
-  "oxxxxxxo",
-  "oxooooxo",
-  "oxooooxo",
-  "ooxxxxoo",
-  "oooooooo",
+  "oxxxxo",
+  "xxoxxx",
+  "xxxxxx",
+  "xoooox",
+  "xoooox",
+  "oxxxxo",
 }
 local expectedGen2Pixels = 0
 for py, row in ipairs(expectedGen2Rows) do
-  for px = 1, 8 do
+  for px = 1, 6 do
     if row:sub(px, px) == "x" then
       expectedGen2Pixels = expectedGen2Pixels + 1
-      T.check(gen2Pixels[(7 + px) .. "," .. (7 + py)],
+      T.check(gen2Pixels[(8 + px) .. "," .. (8 + py)],
         "Gen2 indicator includes pixel " .. px .. "," .. py)
     end
   end
@@ -857,15 +913,80 @@ T.eq(gen2PixelCount, expectedGen2Pixels,
   "Gen2 indicator contains only the supplied glyph pixels")
 T.check(gen2Color and gen2Color[1] == 0 and gen2Color[2] == 0
         and gen2Color[3] == 0,
-  "classic Gen2 indicator moves right and down and draws black")
+  "resized Gen2 indicator preserves its position and draws black")
+local trueColorPixels = PaletteFX.trueColorRects("ui")
+T.eq(#trueColorPixels, expectedGen2Pixels,
+  "caught indicator marks only its visible pixels as true color")
+for _, pixel in ipairs(trueColorPixels) do
+  T.check(pixel.w == 1 and pixel.h == 1,
+    "caught indicator leaves transparent background pixels palette-aware")
+end
+PaletteFX.clearTrueColor()
+PaletteFX.setPass(nil)
+
+local originalColorMode = PaletteFX.mode
+for _, colorMode in ipairs(PaletteFX.MODES) do
+  PaletteFX.setMode(colorMode)
+  rectangles = {}
+  battle:draw()
+  local outline = rectangleAt(10, 9)
+  local expected = colorMode == "gbc_inv" and 1 or 0
+  T.check(outline and outline.color[1] == expected
+          and outline.color[2] == expected and outline.color[3] == expected,
+    "Gen2 indicator has contrast in " .. colorMode .. " color mode")
+end
+PaletteFX.setMode(originalColorMode)
+
+game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
+PaletteFX.setMode("classic")
+rectangles = {}
+battle:draw()
+local classicBlack = rectangleAt(10, 8)
+local classicDark = rectangleAt(10, 9)
+local classicLight = rectangleAt(10, 10)
+T.check(classicBlack and classicBlack.color[1] == 15 / 255
+        and classicBlack.color[2] == 56 / 255
+        and classicBlack.color[3] == 15 / 255,
+  "classic mode maps the indicator outline to classic ink")
+T.check(classicDark and classicDark.color[1] == 48 / 255
+        and classicLight and classicLight.color[1] == 139 / 255,
+  "classic mode maps both indicator fill shades")
+
+PaletteFX.setMode("gbc_inv")
+rectangles = {}
+battle:draw()
+local sgbInvBlack = rectangleAt(10, 8)
+local sgbInvDark = rectangleAt(10, 9)
+local sgbInvLight = rectangleAt(10, 10)
+T.check(sgbInvBlack and sgbInvBlack.color[1] == 1
+        and sgbInvBlack.color[2] == 1 and sgbInvBlack.color[3] == 1,
+  "SGB inverted mode reverses the indicator outline")
+T.check(sgbInvDark and sgbInvDark.color[1] == 1
+        and sgbInvDark.color[2] == 132 / 255
+        and sgbInvLight and sgbInvLight.color[1] == 148 / 255,
+  "SGB inverted mode reverses the red fill shades")
+
+PaletteFX.setMode("og_inv")
+rectangles = {}
+battle:draw()
+local ogInvDark = rectangleAt(10, 9)
+local ogInvLight = rectangleAt(10, 10)
+local ogInvOutline = rectangleAt(10, 8)
+T.check(ogInvDark and ogInvDark.color[1] == 170 / 255
+        and ogInvLight and ogInvLight.color[1] == 85 / 255,
+  "OG inverted mode uses reversed grayscale fill shades")
+T.check(ogInvOutline and ogInvOutline.color[1] == 0
+        and ogInvOutline.color[2] == 0 and ogInvOutline.color[3] == 0,
+  "OG inverted mode keeps the shaded indicator outline black")
+PaletteFX.setMode(originalColorMode)
 
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "off"
-bar, ball = nil, nil
+bar, rectangles = nil, {}
 local baseDrawsBeforeDisabled = baseDraws
 battle:draw()
 T.eq(baseDraws, baseDrawsBeforeDisabled + 1,
   "disabled overlays still call the base renderer")
-T.check(bar == nil and ball == nil, "disabled options draw no overlays")
+T.check(bar == nil and #rectangles == 0, "disabled options draw no overlays")
 
 love.graphics.draw, love.graphics.rectangle = oldDraw, oldRectangle
 love.graphics.setColor(1, 1, 1, 1)
