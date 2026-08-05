@@ -19,7 +19,9 @@ local feature = {
   menu = {
     label = "EASY INTERACTIONS",
     key = "qol_easy_interactions",
-    description = "CONFIGURE EASY\nFIELD INTERACTIONS.",
+    description = "(A) TO CUT BUSHES,\nUSE STRENGTH,SURF\f"
+      .. "OR FISH.(SELECT)\nTO FLY,TELEPORT,\f"
+      .. "DIG OR USE FLASH.\f"
   },
   subfeatures = {
     {
@@ -51,7 +53,8 @@ local feature = {
       menu = {
         label = "WATER INTERACTION",
         key = "qol_water_interaction",
-        description = "CONTROLS (A) ACTION\nIN FRONT OF WATER.",
+        description = "CONTROLS WHAT\nPRESSING (A) DOES\f"
+          .. "IN FRONT OF WATER.",
       },
     },
   },
