@@ -30,7 +30,7 @@ local EXP_BURST_TILE_ROWS = {
 local feature = {
   option = {
     key = "qol_exp_bar",
-    label = "BATTLE EXP BAR",
+    label = "XP BAR",
     type = "choice",
     default = "off",
     aliases = {
@@ -45,9 +45,9 @@ local feature = {
     },
   },
   menu = {
-    label = "EXPERIENCE BAR",
+    label = "XP BAR",
     key = "qol_exp_bar",
-    description = "SHOWS EXP PROGRESS\nTOWARD THE NEXT\f"
+    description = "SHOWS XP PROGRESS\nTOWARDS THE NEXT\f"
       .. "LEVEL IN BATTLE.",
   },
 }

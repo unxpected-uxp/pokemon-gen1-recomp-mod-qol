@@ -79,8 +79,8 @@ local menu = game.stack:top()
 T.check(menu and menu.screenId == exports.screenId, "opens the custom submenu")
 T.eq(menu.rows[1].value(game), "OFF", "EXP bar defaults off")
 T.eq(menu.rows[2].value(game), "OFF", "indicator defaults off")
-T.eq(menu.rows[3].value(game), "OFF", "Easy interactions default off")
-T.eq(menu.rows[4].value(game), "OFF", "Location banners default off")
+T.eq(menu.rows[3].value(game), "OFF", "Location banners default off")
+T.eq(menu.rows[4].value(game), "OFF", "Easy interactions defaults off")
 
 local fieldChecks, cuts, strengthChecks, surfChecks = 0, 0, 0, 0
 local fieldResult = "nothing"
@@ -159,33 +159,67 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_caught_indicator, "red",
 T.eq(menu.rows[2].value(game), "ON (RED)", "submenu refreshes the indicator label")
 menu.index = 3
 press(menu, "right")
-T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
-  "right enables Easy interactions")
-T.eq(menu.rows[3].value(game), "ON", "submenu refreshes Easy interactions")
-T.eq(writes, 4, "submenu changes persist immediately")
-
-menu.index = 4
-press(menu, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_location_banners, 1,
   "right enables one-second location banners")
-T.eq(menu.rows[4].value(game), "ON (1 SECOND)",
+T.eq(menu.rows[3].value(game), "ON (1 SECOND)",
   "submenu refreshes the one-second location banner mode")
-T.eq(writes, 5, "location banner changes persist immediately")
+T.eq(writes, 4, "location banner changes persist immediately")
 
 press(menu, "right")
-T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
+T.eq(menu.rows[3].value(game), "ON (2 SECONDS)",
   "location banners support a two-second mode")
 press(menu, "right")
-T.eq(menu.rows[4].value(game), "ON (3 SECONDS)",
+T.eq(menu.rows[3].value(game), "ON (3 SECONDS)",
   "location banners support a three-second mode")
 press(menu, "right")
-T.eq(menu.rows[4].value(game), "OFF", "location banner modes wrap to off")
+T.eq(menu.rows[3].value(game), "OFF", "location banner modes wrap to off")
 
 -- Existing saves stored true for the old toggle; retain its two-second timing.
 game.save.options.modOptions.quality_of_life.qol_location_banners = true
 run.loader.modOptions.quality_of_life.qol_location_banners = true
-T.eq(menu.rows[4].value(game), "ON (2 SECONDS)",
+T.eq(menu.rows[3].value(game), "ON (2 SECONDS)",
   "the old enabled value migrates to the two-second mode")
+
+menu.index = 4
+press(menu, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
+  "right enables Easy interactions")
+T.eq(menu.rows[4].value(game), "ON (CONFIGURE)",
+  "submenu shows ON (CONFIGURE) when enabled")
+local easySub = game.stack:top()
+T.check(easySub and easySub.screenId == "EasyInteractions" and easySub ~= menu,
+  "right toggles to ON and opens the Easy interactions submenu")
+T.eq(easySub.rows[1].value(game), "OFF", "Cut Grass defaults off")
+T.eq(easySub.rows[2].value(game), "FISH FIRST",
+  "Water Interaction defaults to fish first")
+
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_cut_grass, true,
+  "right enables Cut Grass")
+T.eq(easySub.rows[1].value(game), "ON", "submenu refreshes Cut Grass")
+T.eq(writes, 9, "Easy interactions submenu changes persist immediately")
+
+easySub.index = 2
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
+  "surf_first", "right cycles Water Interaction to surf first")
+T.eq(easySub.rows[2].value(game), "SURF FIRST",
+  "submenu shows the surf first label")
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
+  "fish_only", "right cycles Water Interaction to fish only")
+T.eq(easySub.rows[2].value(game), "FISH ONLY",
+  "submenu shows the fish only label")
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
+  "surf_only", "right cycles Water Interaction to surf only")
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
+  "fish_first", "Water Interaction wraps back to fish first")
+
+press(easySub, "b")
+T.eq(game.stack:top(), menu,
+  "B on the Easy interactions submenu returns to the QUALITY OF LIFE menu")
 
 local oldDrawBox, oldFontDraw, oldFontWidth = Font.drawBox, Font.draw, Font.width
 local oldGetTime = love.timer.getTime

@@ -20,8 +20,8 @@ return function(mod)
   local features = {
     loadModule("qol_feature_xp_bar.lua"),
     loadModule("qol_feature_caught_indicator.lua"),
-    loadModule("qol_feature_easy_interactions.lua"),
     loadModule("qol_feature_location_banners.lua"),
+    loadModule("qol_feature_easy_interactions.lua"),
   }
   local services = {
     options = loadModule("qol_options.lua").install(mod, features),

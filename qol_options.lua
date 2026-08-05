@@ -6,22 +6,34 @@ function M.install(mod, features)
   local schema = {}
   local modes = {}
   local aliases = {}
-  for _, feature in ipairs(features) do
-    local option = feature.option
-    schema[#schema + 1] = option
-    aliases[option.key] = option.aliases
-    if option.type == "choice" then
-      local choices = {}
-      for _, choice in ipairs(option.choices) do
-        choices[#choices + 1] = { id = choice[2], label = choice[1] }
+
+  local function registerFeature(feature)
+    if feature.option then
+      local option = feature.option
+      schema[#schema + 1] = option
+      aliases[option.key] = option.aliases
+      if option.type == "choice" then
+        local choices = {}
+        for _, choice in ipairs(option.choices) do
+          choices[#choices + 1] = { id = choice[2], label = choice[1] }
+        end
+        modes[option.key] = choices
+      else
+        modes[option.key] = {
+          { id = false, label = "OFF" },
+          { id = true, label = "ON" },
+        }
       end
-      modes[option.key] = choices
-    else
-      modes[option.key] = {
-        { id = false, label = "OFF" },
-        { id = true, label = "ON" },
-      }
     end
+    if feature.subfeatures then
+      for _, sub in ipairs(feature.subfeatures) do
+        registerFeature(sub)
+      end
+    end
+  end
+
+  for _, feature in ipairs(features) do
+    registerFeature(feature)
   end
   mod.options:define(schema)
 
@@ -54,7 +66,9 @@ function M.install(mod, features)
 
   local function modeIndex(game, key)
     local value = optionValue(game, key)
-    for i, mode in ipairs(modes[key]) do
+    local modeList = modes[key]
+    if not modeList then return 1 end
+    for i, mode in ipairs(modeList) do
       if mode.id == value then return i end
     end
     return 1
@@ -62,66 +76,135 @@ function M.install(mod, features)
 
   local function stepMode(game, key, dir)
     local values = modes[key]
+    if not values then return end
     local i = (modeIndex(game, key) - 1 + dir) % #values + 1
     setOption(game, key, values[i].id)
   end
 
-  local function makeScreen(game)
-    local OptionRows = require("src.ui.OptionRows")
-    local rows = {}
-    for _, feature in ipairs(features) do
-      local menu = feature.menu
-      local key = menu.key
-      rows[#rows + 1] = {
-        label = menu.label,
-        key = key,
-        description = menu.description,
-        value = function(g)
-          return modes[key][modeIndex(g, key)].label
-        end,
-      }
-    end
-
-    local screen = {
-      game = game,
-      rows = rows,
-      index = 1,
-      scroll = 0,
-      isOpaque = true,
-    }
-
-    function screen:sgbPalettes(g)
-      return require("src.render.PaletteFX").wholeNamed(g.data, "MEWMON")
-    end
-
-    function screen:update()
-      local input = self.game.input
-      if input:wasPressed("up") then
-        self.index = (self.index - 2) % #self.rows + 1
-      elseif input:wasPressed("down") then
-        self.index = self.index % #self.rows + 1
-      elseif input:wasPressed("left") or input:wasPressed("right") then
-        local dir = input:wasPressed("left") and -1 or 1
-        stepMode(self.game, self.rows[self.index].key, dir)
-      elseif input:wasPressed("a") then
-        self.game.stack:push(mod.ui.TextBox.new(
-          self.game, self.rows[self.index].description))
-      elseif input:wasPressed("b") then
-        self.game.stack:pop()
+  local function makeScreenFactory(screenFeatures, currentScreenId)
+    return function(game)
+      local OptionRows = require("src.ui.OptionRows")
+      local rows = {}
+      for _, feature in ipairs(screenFeatures) do
+        local menu = feature.menu
+        if feature.isSubmenu then
+          if feature.option then
+            -- Toggleable submenu
+            local key = feature.option.key
+            local subScreenId = feature.screenId
+            rows[#rows + 1] = {
+              label = menu.label,
+              key = key,
+              description = menu.description,
+              value = function(g)
+                local enabled = optionValue(g, key) == true
+                return enabled and "ON (CONFIGURE)" or "OFF"
+              end,
+              subScreenId = subScreenId,
+            }
+          else
+            -- Pure submenu without toggle
+            local subScreenId = feature.screenId
+            rows[#rows + 1] = {
+              label = menu.label,
+              description = menu.description,
+              value = function() return "CONFIGURE" end,
+              activate = function(g) mod.ui.push(g, subScreenId) end,
+            }
+          end
+        else
+          local key = menu.key
+          rows[#rows + 1] = {
+            label = menu.label,
+            key = key,
+            description = menu.description,
+            value = function(g)
+              return modes[key][modeIndex(g, key)].label
+            end,
+          }
+        end
       end
-      self.scroll = OptionRows.clampScroll(
-        self.index, self.scroll, #self.rows, nil)
-    end
 
-    function screen:draw()
-      OptionRows.draw(self.game, self.rows, self.index, self.scroll,
-                      "A:INFO B:EXIT")
-    end
+      local screen = {
+        screenId = currentScreenId,
+        game = game,
+        rows = rows,
+        index = 1,
+        scroll = 0,
+        isOpaque = true,
+      }
 
-    return screen
+      function screen:sgbPalettes(g)
+        return require("src.render.PaletteFX").wholeNamed(g.data, "MEWMON")
+      end
+
+      function screen:update()
+        local input = self.game.input
+        local row = self.rows[self.index]
+        if input:wasPressed("up") then
+          self.index = (self.index - 2) % #self.rows + 1
+        elseif input:wasPressed("down") then
+          self.index = self.index % #self.rows + 1
+        elseif input:wasPressed("left") or input:wasPressed("right") then
+          if row.activate then
+            if input:wasPressed("right") then
+              row.activate(self.game)
+            end
+          else
+            local dir = input:wasPressed("left") and -1 or 1
+            stepMode(self.game, row.key, dir)
+            if row.subScreenId and optionValue(self.game, row.key) == true then
+              mod.ui.push(self.game, row.subScreenId)
+            end
+          end
+        elseif input:wasPressed("a") then
+          if row.activate then
+            row.activate(self.game)
+          elseif row.subScreenId and optionValue(self.game, row.key) == true then
+            mod.ui.push(self.game, row.subScreenId)
+          else
+            self.game.stack:push(mod.ui.TextBox.new(
+              self.game, row.description))
+          end
+        elseif input:wasPressed("b") then
+          self.game.stack:pop()
+        end
+        self.scroll = OptionRows.clampScroll(
+          self.index, self.scroll, #self.rows, nil)
+      end
+
+      function screen:draw()
+        local Font = require("src.render.Font")
+        OptionRows.draw(self.game, self.rows, self.index, self.scroll,
+                        "A:INFO B:EXIT")
+
+        if currentScreenId == "EasyInteractions" then
+          Font.drawBox(0, 0, 20, 4)
+          Font.draw(
+            "PRESS (A) IN FRONT\nOF GRASS OR WATER.",
+            8, 8)
+        end
+      end
+
+      return screen
+    end
   end
 
-  mod.content.screens:register(SCREEN_ID, { new = makeScreen })
+  mod.content.screens:register(SCREEN_ID, { new = makeScreenFactory(features, SCREEN_ID) })
+
+  local function registerScreens(featureList)
+    for _, feature in ipairs(featureList) do
+      if feature.isSubmenu and feature.screenId then
+        mod.content.screens:register(feature.screenId, {
+          new = makeScreenFactory(feature.subfeatures, feature.screenId)
+        })
+        if feature.subfeatures then
+          registerScreens(feature.subfeatures)
+        end
+      end
+    end
+  end
+  registerScreens(features)
 
   -- The manager's schema screen cannot assign a custom A action to choices.
   -- Route only this mod to the same registered screen after loading succeeds.

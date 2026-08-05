@@ -14,14 +14,46 @@ local feature = {
     type = "toggle",
     default = false,
   },
+  isSubmenu = true,
+  screenId = "EasyInteractions",
   menu = {
     label = "EASY INTERACTIONS",
     key = "qol_easy_interactions",
-    description = "ACTIVATE STRENGTH/\nCUT WITH (A) WHEN\f"
-      .. "FACING BOULDERS\nOR BUSHES.\f"
-      .. "USE (SELECT) TO\nUSE FLY, TELEPORT\f"
-      .. "OR DIG. PRESS (A)\nIN FRONT OF WATER\f"
-      .. "TO USE SURF OR\nFISHING RODS.",
+    description = "CONFIGURE EASY\nFIELD INTERACTIONS.",
+  },
+  subfeatures = {
+    {
+      option = {
+        key = "qol_cut_grass",
+        label = "CUT GRASS",
+        type = "toggle",
+        default = false,
+      },
+      menu = {
+        label = "CUT GRASS",
+        key = "qol_cut_grass",
+        description = "(A) CUTS GRASS IN\nTHE OVERWORLD.",
+      },
+    },
+    {
+      option = {
+        key = "qol_water_interaction",
+        label = "WATER INTERACTION",
+        type = "choice",
+        default = "fish_first",
+        choices = {
+          { "FISH FIRST", "fish_first" },
+          { "SURF FIRST", "surf_first" },
+          { "FISH ONLY", "fish_only" },
+          { "SURF ONLY", "surf_only" },
+        },
+      },
+      menu = {
+        label = "WATER INTERACTION",
+        key = "qol_water_interaction",
+        description = "CONTROLS (A) ACTION\nIN FRONT OF WATER.",
+      },
+    },
   },
 }
 
@@ -31,8 +63,29 @@ function feature.install(mod, services)
   local Strings = require("src.core.Strings")
   local optionValue = services.options.value
 
-  local function enabled(game)
-    return optionValue(game, "qol_easy_interactions")
+  local function cutGrassEnabled(game)
+    local val = optionValue(game, "qol_cut_grass")
+    if val == nil then
+      return optionValue(game, "qol_easy_interactions") == true
+    end
+    return val == true
+  end
+
+  local function waterInteractionSetting(game)
+    local val = optionValue(game, "qol_water_interaction")
+    if val == nil then
+      if optionValue(game, "qol_easy_interactions") == false then
+        return "off"
+      end
+      return "fish_first"
+    end
+    return val
+  end
+
+  local function easyInteractionsActive(game)
+    local masterEnabled = optionValue(game, "qol_easy_interactions")
+    if masterEnabled == false then return false end
+    return cutGrassEnabled(game) or waterInteractionSetting(game) ~= "off"
   end
 
   local function useCutFacing(ow)
@@ -66,7 +119,7 @@ function feature.install(mod, services)
     }))
   end
 
-  local function useWaterFacing(ow)
+  local function useWaterFacing(ow, mode)
     if not ow:facingIsShoreOrWater() then return false end
     if ow.player and ow.player.surfing then return true end
 
@@ -75,21 +128,54 @@ function feature.install(mod, services)
     local canSurf = ow:useSurfFieldMove() == "ok"
     if not rod and not canSurf then return false end
 
-    if rod and canSurf then
-      local def = game.data.items and game.data.items[rod]
-      local rodName = def and def.name or rod:gsub("_", " ")
-      local rodLabel = "USE " .. rodName
-      pushBottomMenu(game, {
-        { label = rodLabel, onSelect = function() ow:goFishing(rod) end },
-        { label = "SURF", onSelect = function() useSurfFacing(ow) end },
-        { label = "CANCEL" },
-      })
-    elseif rod then
-      ow:goFishing(rod)
-    else
-      useSurfFacing(ow)
+    mode = mode or "fish_first"
+    if mode == "off" then return false end
+
+    if mode == "fish_only" then
+      if rod then
+        ow:goFishing(rod)
+        return true
+      end
+      return false
+    elseif mode == "surf_only" then
+      if canSurf then
+        useSurfFacing(ow)
+        return true
+      end
+      return false
+    elseif mode == "surf_first" then
+      if rod and canSurf then
+        local def = game.data.items and game.data.items[rod]
+        local rodName = def and def.name or rod:gsub("_", " ")
+        local rodLabel = "USE " .. rodName
+        pushBottomMenu(game, {
+          { label = "SURF", onSelect = function() useSurfFacing(ow) end },
+          { label = rodLabel, onSelect = function() ow:goFishing(rod) end },
+          { label = "CANCEL" },
+        })
+      elseif canSurf then
+        useSurfFacing(ow)
+      else
+        ow:goFishing(rod)
+      end
+      return true
+    else -- "fish_first"
+      if rod and canSurf then
+        local def = game.data.items and game.data.items[rod]
+        local rodName = def and def.name or rod:gsub("_", " ")
+        local rodLabel = "USE " .. rodName
+        pushBottomMenu(game, {
+          { label = rodLabel, onSelect = function() ow:goFishing(rod) end },
+          { label = "SURF", onSelect = function() useSurfFacing(ow) end },
+          { label = "CANCEL" },
+        })
+      elseif rod then
+        ow:goFishing(rod)
+      else
+        useSurfFacing(ow)
+      end
+      return true
     end
-    return true
   end
 
   local function useFlash(ow, game)
@@ -157,7 +243,7 @@ function feature.install(mod, services)
     end
     handlers[mod.id] = function(ow)
       local game = mod.world.game
-      if not enabled(game) or not game or not game.stack
+      if not easyInteractionsActive(game) or not game or not game.stack
          or game.stack:top() ~= ow then return false end
       if not game.input:wasPressed("select") then return false end
       openSelectFieldMoves(ow)
@@ -195,11 +281,19 @@ function feature.install(mod, services)
 
   mod.events:on("world.interacted", function(event)
     local game = mod.world.game
-    if not event or not enabled(game) then return end
+    if not event or not easyInteractionsActive(game) then return end
     local ow = mod.world:overworld()
     if not ow then return end
+
     if event.kind == "none" then
-      if not useWaterFacing(ow) then useCutFacing(ow) end
+      local waterMode = waterInteractionSetting(game)
+      local handledWater = false
+      if waterMode ~= "off" then
+        handledWater = useWaterFacing(ow, waterMode)
+      end
+      if not handledWater and cutGrassEnabled(game) then
+        useCutFacing(ow)
+      end
     elseif event.kind == "npc" then
       useStrengthFacing(ow, event.target)
     end
