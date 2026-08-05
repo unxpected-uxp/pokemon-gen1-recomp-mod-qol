@@ -91,7 +91,8 @@ local flyDest, escapes, darkChanges = nil, 0, 0
 local baseUIDraws = 0
 local overworld = {
   isOverworld = true,
-  map = { id = "PALLET_TOWN", def = { tileset = "OVERWORLD" } },
+  map = { id = "PALLET_TOWN", def = { tileset = "OVERWORLD" },
+          isGrassCell = function() return false end },
   player = { facingCell = function() return 7, 8 end },
   useCutFieldMove = function()
     fieldChecks = fieldChecks + 1
@@ -186,9 +187,12 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_easy_interactions, true,
   "right enables Easy interactions")
 T.eq(menu.rows[4].value(game), "ON (CONFIGURE)",
   "submenu shows ON (CONFIGURE) when enabled")
+T.eq(game.stack:top(), menu,
+  "right toggles Easy interactions without opening the submenu")
+press(menu, "a")
 local easySub = game.stack:top()
 T.check(easySub and easySub.screenId == "EasyInteractions" and easySub ~= menu,
-  "right toggles to ON and opens the Easy interactions submenu")
+  "A opens the Easy interactions submenu when enabled")
 T.eq(easySub.rows[1].value(game), "OFF", "Cut Grass defaults off")
 T.eq(easySub.rows[2].value(game), "FISH FIRST",
   "Water Interaction defaults to fish first")

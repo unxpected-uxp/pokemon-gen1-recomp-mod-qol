@@ -153,9 +153,6 @@ function M.install(mod, features)
           else
             local dir = input:wasPressed("left") and -1 or 1
             stepMode(self.game, row.key, dir)
-            if row.subScreenId and optionValue(self.game, row.key) == true then
-              mod.ui.push(self.game, row.subScreenId)
-            end
           end
         elseif input:wasPressed("a") then
           if row.activate then
@@ -175,15 +172,14 @@ function M.install(mod, features)
 
       function screen:draw()
         local Font = require("src.render.Font")
-        OptionRows.draw(self.game, self.rows, self.index, self.scroll,
-                        "A:INFO B:EXIT")
-
-        if currentScreenId == "EasyInteractions" then
-          Font.drawBox(0, 0, 20, 4)
-          Font.draw(
-            "PRESS (A) IN FRONT\nOF GRASS OR WATER.",
-            8, 8)
-        end
+        local row = self.rows[self.index]
+        local configurable = row.activate ~= nil
+          or (row.subScreenId and optionValue(self.game, row.key) == true)
+        local footer = configurable and "A:CONFIGURE B:BACK" or "A:INFO B:BACK"
+        OptionRows.draw(self.game, self.rows, self.index, self.scroll)
+        love.graphics.setColor(0, 0, 0, 1)
+        Font.draw(footer, 8, 136)
+        love.graphics.setColor(1, 1, 1, 1)
       end
 
       return screen

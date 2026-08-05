@@ -88,9 +88,10 @@ function feature.install(mod, services)
     return cutGrassEnabled(game) or waterInteractionSetting(game) ~= "off"
   end
 
-  local function useCutFacing(ow)
+  local function useCutFacing(ow, allowGrass)
     if ow:useCutFieldMove() ~= "ok" then return false end
     local fx, fy = ow.player:facingCell()
+    if not allowGrass and ow.map:isGrassCell(fx, fy) then return false end
     return ow:tryCut(fx, fy) == true
   end
 
@@ -291,8 +292,8 @@ function feature.install(mod, services)
       if waterMode ~= "off" then
         handledWater = useWaterFacing(ow, waterMode)
       end
-      if not handledWater and cutGrassEnabled(game) then
-        useCutFacing(ow)
+      if not handledWater then
+        useCutFacing(ow, cutGrassEnabled(game))
       end
     elseif event.kind == "npc" then
       useStrengthFacing(ow, event.target)
