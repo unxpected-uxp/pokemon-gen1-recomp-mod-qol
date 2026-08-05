@@ -88,13 +88,14 @@ function feature.install(mod, services)
     local x, y, scale
     local voxel3dBattleData = context.voxel3dBattleData
     local hudShake = battle.fx and battle.fx.hudShakeX or 0
+    local isWide = battle:wideLayout()
     if voxel3dBattleData then
       scale = voxel3dBattleData.scale
       x = (enemyNameX(battle) - 9) * scale
       y = voxel3dBattleData.ly + 7 * scale
       if mode == "gen2" then x, y = x + 2 * scale, y + 2 * scale end
       love.graphics.setCanvas(voxel3dBattleData.canvas)
-    elseif battle:wideLayout() then
+    elseif isWide then
       x, y = 112 + context.sx, 7 + context.sy
       if mode == "gen2" then x, y = x + 1, y + 2 end
     else
@@ -108,16 +109,30 @@ function feature.install(mod, services)
     love.graphics.setShader()
     local colors
     if mode == "gen2" then
-      local white = voxel3dBattleData or PaletteFX.mode == "gbc_inv"
+      local white
+      if voxel3dBattleData then
+        white = false
+      elseif isWide then
+        white = PaletteFX.mode == "og_inv"
+      else
+        white = PaletteFX.mode == "gbc_inv"
+      end
       colors = { x = white and { 255, 255, 255 } or { 0, 0, 0 } }
     else
       local palette = indicatorColors(
         battle, mode == "red" and RED_BALL_COLORS or PaletteFX.GRAYS)
       local white = { 255, 255, 255 }
       local black = { 0, 0, 0 }
+      local outline
+      if voxel3dBattleData then
+        outline = black
+      elseif PaletteFX.mode == "og_inv" then
+        outline = isWide and white or black
+      else
+        outline = palette[4]
+      end
       colors = {
-        x = voxel3dBattleData and white
-          or PaletteFX.mode == "og_inv" and black or palette[4],
+        x = outline,
         d = palette[3],
         l = palette[2],
       }

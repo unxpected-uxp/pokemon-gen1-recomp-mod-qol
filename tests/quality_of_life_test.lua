@@ -720,7 +720,54 @@ for _, rectangle in ipairs(rectangles) do
 end
 T.check(wideGen2Pixel and wideGen2Pixel.color[1] == 0,
   "the resized wide Gen2 indicator preserves its visible alignment")
+
+do
+  local PaletteFX = require("src.render.PaletteFX")
+  local originalWideColorMode = PaletteFX.mode
+  PaletteFX.setMode("og_inv")
+  rectangles = {}
+  battle:draw()
+  local wideOgInvPixel
+  for _, rectangle in ipairs(rectangles) do
+    if rectangle.x == 114 and rectangle.y == 9
+        and rectangle.w == 1 and rectangle.h == 1 then
+      wideOgInvPixel = rectangle
+      break
+    end
+  end
+  T.check(wideOgInvPixel and wideOgInvPixel.color[1] == 1,
+    "wide Gen2 indicator draws white in OG INV")
+
+  PaletteFX.setMode("gbc_inv")
+  rectangles = {}
+  battle:draw()
+  local wideGbcInvPixel
+  for _, rectangle in ipairs(rectangles) do
+    if rectangle.x == 114 and rectangle.y == 9
+        and rectangle.w == 1 and rectangle.h == 1 then
+      wideGbcInvPixel = rectangle
+      break
+    end
+  end
+  T.check(wideGbcInvPixel and wideGbcInvPixel.color[1] == 0,
+    "wide Gen2 indicator draws black in SGB INV")
+  PaletteFX.setMode(originalWideColorMode)
+end
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
+
+do
+  local PaletteFX = require("src.render.PaletteFX")
+  local originalWideRedColorMode = PaletteFX.mode
+  PaletteFX.setMode("og_inv")
+  rectangles = {}
+  battle:draw()
+  local wideRedOgInvOutline = rectangleAt(115, 8)
+  T.check(wideRedOgInvOutline and wideRedOgInvOutline.color[1] == 1
+          and wideRedOgInvOutline.color[2] == 1
+          and wideRedOgInvOutline.color[3] == 1,
+    "wide RED indicator draws a white outline in OG INV")
+  PaletteFX.setMode(originalWideRedColorMode)
+end
 
 battle.fx = { shakeX = 2, shakeY = 3, hudShakeX = 4 }
 rectangles = {}
@@ -756,9 +803,25 @@ T.check(voxelRedOutline and voxelRedOutline.canvas == voxelCanvas
   "voxel caught indicator applies its one-pixel position offset")
 T.check(voxelRedOutline.w == 3 and voxelRedOutline.h == 3,
   "voxel caught indicator uses framebuffer scale")
-T.check(voxelRedOutline.color[1] == 1 and voxelRedOutline.color[2] == 1
-        and voxelRedOutline.color[3] == 1,
-  "voxel caught indicator draws a white outline")
+T.check(voxelRedOutline.color[1] == 0 and voxelRedOutline.color[2] == 0
+        and voxelRedOutline.color[3] == 0,
+  "voxel caught indicator draws a black outline")
+
+do
+  local PaletteFX = require("src.render.PaletteFX")
+  local originalVoxelRedColorMode = PaletteFX.mode
+  for _, colorMode in ipairs(PaletteFX.MODES) do
+    PaletteFX.setMode(colorMode)
+    rectangles = {}
+    battle:draw()
+    local pixel = rectangleAt(6, 24, 3, 3)
+    T.check(pixel and pixel.color[1] == 0 and pixel.color[2] == 0
+            and pixel.color[3] == 0,
+      "voxel RED indicator draws a black outline in " .. colorMode
+        .. " color mode")
+  end
+  PaletteFX.setMode(originalVoxelRedColorMode)
+end
 T.check(bar and bar.canvas == voxelCanvas and bar.x + bar.w == 641,
   "voxel EXP bar follows the player HUD to the right edge")
 T.check(bar.y == 267 and bar.h == 6,
@@ -776,10 +839,32 @@ for _, rectangle in ipairs(rectangles) do
   end
 end
 T.check(voxelGen2Pixel and voxelGen2Pixel.canvas == voxelCanvas
-        and voxelGen2Pixel.color[1] == 1
-        and voxelGen2Pixel.color[2] == 1
-        and voxelGen2Pixel.color[3] == 1,
-  "voxel Gen2 indicator moves right and down and draws white")
+        and voxelGen2Pixel.color[1] == 0
+        and voxelGen2Pixel.color[2] == 0
+        and voxelGen2Pixel.color[3] == 0,
+  "voxel Gen2 indicator moves right and down and draws black")
+
+do
+  local PaletteFX = require("src.render.PaletteFX")
+  local originalVoxelColorMode = PaletteFX.mode
+  for _, colorMode in ipairs(PaletteFX.MODES) do
+    PaletteFX.setMode(colorMode)
+    rectangles = {}
+    battle:draw()
+    local pixel
+    for _, rectangle in ipairs(rectangles) do
+      if rectangle.x == 6 and rectangle.y == 27
+          and rectangle.w == 3 and rectangle.h == 3 then
+        pixel = rectangle
+        break
+      end
+    end
+    T.check(pixel and pixel.color[1] == 0 and pixel.color[2] == 0
+            and pixel.color[3] == 0,
+      "voxel Gen2 indicator draws black in " .. colorMode .. " color mode")
+  end
+  PaletteFX.setMode(originalVoxelColorMode)
+end
 T.eq(love.graphics.getCanvas(), uiCanvas,
   "voxel overlays restore the engine UI canvas")
 game.save.options.modOptions.quality_of_life.qol_caught_indicator = "red"
