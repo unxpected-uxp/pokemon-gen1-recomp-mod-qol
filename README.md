@@ -80,6 +80,11 @@ After installing, features default to **OFF**.
       When <strong>FLY</strong>, <strong>DIG</strong>, <strong>FLASH</strong>, and/or <strong>TELEPORT</strong> are <br>
       available, press <kbd>SELECT</kbd> to choose which one to use.
       <br><br>
+      The same <kbd>SELECT</kbd> popup offers a <strong>REPEL</strong> whenever you <br>
+      carry one, always spending the weakest first. When it <br>
+      wears off, a <em>YES/NO</em> prompt offers the next one &mdash; turn <br>
+      that off with <em>REPEL PROMPT</em> in the submenu.
+      <br><br>
       Save yourself countless button presses and avoid <br>unnecessary menu navigation.
     </td>
   </tr>

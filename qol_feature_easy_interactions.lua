@@ -1,4 +1,8 @@
+-- strongest first
 local FISHING_RODS = { "SUPER_ROD", "GOOD_ROD", "OLD_ROD" }
+-- weakest first: the cheapest repel is spent before the good ones
+local REPELS = { "REPEL", "SUPER_REPEL", "MAX_REPEL" }
+
 local DIG_TILESETS = {
   FOREST = true,
   CEMETERY = true,
@@ -57,6 +61,20 @@ local feature = {
           .. "IN FRONT OF WATER.",
       },
     },
+    {
+      option = {
+        key = "qol_repel_prompt",
+        label = "REPEL PROMPT",
+        type = "toggle",
+        default = true,
+      },
+      menu = {
+        label = "REPEL PROMPT",
+        key = "qol_repel_prompt",
+        description = "OFFERS TO USE\nANOTHER REPEL WHEN\f"
+          .. "THE CURRENT ONE\nENDS.",
+      },
+    },
   },
 }
 
@@ -105,6 +123,35 @@ function feature.install(mod, services)
         return rod
       end
     end
+  end
+
+  local function repelItem(game)
+    local inventory = game and game.save and game.save.inventory or {}
+    for _, repel in ipairs(REPELS) do
+      if type(inventory[repel]) == "number" and inventory[repel] > 0 then
+        return repel
+      end
+    end
+  end
+
+  local function itemName(game, id)
+    local def = game.data.items and game.data.items[id]
+    return def and def.name or id:gsub("_", " ")
+  end
+
+  -- ItemEffects owns the step counts (100/200/250) and the used-item text;
+  -- BagMenu's own use flow consumes the item separately (Bag.remove).
+  local function useRepel(game, id)
+    local ItemEffects = require("src.inventory.ItemEffects")
+    local Bag = require("src.inventory.Bag")
+    local TextBox = require("src.render.TextBox")
+    local result, messages = ItemEffects.use(game.data, game.save, id)
+    if result ~= "consumed" then return false end
+    Bag.remove(game.save, id, 1)
+    if messages and #messages > 0 then
+      game.stack:push(TextBox.new(game, table.concat(messages, "\f")))
+    end
+    return true
   end
 
   local function useSurfFacing(ow)
@@ -224,6 +271,14 @@ function feature.install(mod, services)
         ow:beginTeleportOut()
       end }
     end
+    -- vanilla lets a repel overwrite an active one, so this stays offered
+    -- while repelSteps is still counting down
+    local repel = repelItem(game)
+    if repel then
+      items[#items + 1] = { label = itemName(game, repel), onSelect = function()
+        useRepel(game, repel)
+      end }
+    end
     if #items == 0 then return false end
 
     items[#items + 1] = { label = "CANCEL" }
@@ -245,14 +300,82 @@ function feature.install(mod, services)
       end
       OverworldController.__qolSelectHandlers = handlers
     end
+    -- gated on the master option alone: the SELECT popup carries field moves
+    -- and repels, neither of which the (A)-button sub-toggles govern
     handlers[mod.id] = function(ow)
       local game = mod.world.game
-      if not easyInteractionsActive(game) or not game or not game.stack
-         or game.stack:top() ~= ow then return false end
+      if not game or optionValue(game, "qol_easy_interactions") ~= true
+         or not game.stack or game.stack:top() ~= ow then return false end
       if not game.input:wasPressed("select") then return false end
       openSelectFieldMoves(ow)
       return true
     end
+  end
+
+  local function repelPromptEnabled(game)
+    if optionValue(game, "qol_easy_interactions") ~= true then return false end
+    return optionValue(game, "qol_repel_prompt") ~= false
+  end
+
+  -- onStepComplete decrements repelSteps and, on the 1 -> 0 step, pushes the
+  -- "REPEL's effect wore off." box and returns; the engine emits no event for
+  -- it, so the wear-off has to be spotted by comparing the counter across the
+  -- step.  Chained onto that box's onDone rather than pushed over it, so the
+  -- YES/NO never covers text the player has not read yet.
+  local function offerNextRepel(game)
+    local repel = repelItem(game)
+    if not repel then return end
+    local TextBox = require("src.render.TextBox")
+    local function pushPrompt()
+      game.stack:push(TextBox.new(game,
+        "Use another\n" .. itemName(game, repel) .. "?", nil,
+        { choice = function(yes)
+          if yes then useRepel(game, repel) end
+        end }))
+    end
+    local top = game.stack:top()
+    if getmetatable(top) == TextBox then
+      local onDone = top.onDone
+      top.onDone = function(...)
+        if onDone then onDone(...) end
+        pushPrompt()
+      end
+    else
+      pushPrompt()
+    end
+  end
+
+  do
+    local OverworldController = require("src.world.OverworldController")
+    local hooks = rawget(OverworldController, "__qolStepHooks")
+    if not hooks then
+      hooks = {}
+      local onStepComplete = OverworldController.onStepComplete
+      OverworldController.onStepComplete = function(self, ...)
+        local before = {}
+        for id, hook in pairs(OverworldController.__qolStepHooks) do
+          before[id] = hook.before(self)
+        end
+        local result = onStepComplete(self, ...)
+        for id, hook in pairs(OverworldController.__qolStepHooks) do
+          hook.after(self, before[id])
+        end
+        return result
+      end
+      OverworldController.__qolStepHooks = hooks
+    end
+    hooks[mod.id] = {
+      before = function()
+        local game = mod.world.game
+        return game and game.save and game.save.repelSteps or 0
+      end,
+      after = function(_, before)
+        local game = mod.world.game
+        if not game or not game.stack or not repelPromptEnabled(game) then return end
+        if (before or 0) <= 0 or (game.save.repelSteps or 0) ~= 0 then return end
+        offerNextRepel(game)
+      end,
+    }
   end
 
   local function useStrengthFacing(ow, target)

@@ -61,6 +61,8 @@ local game = {
   mods = run.loader,
   save = {
     inventory = {},
+    -- ItemEffects.use reads the player name for the used-item message
+    player = { name = "RED" },
     options = { modOptions = {} },
     pokedex = { seen = { RATTATA = true }, owned = { RATTATA = true } },
   },
@@ -196,6 +198,9 @@ T.check(easySub and easySub.screenId == "EasyInteractions" and easySub ~= menu,
 T.eq(easySub.rows[1].value(game), "OFF", "Cut Grass defaults off")
 T.eq(easySub.rows[2].value(game), "FISH FIRST",
   "Water Interaction defaults to fish first")
+T.eq(easySub.rows[3].label, "REPEL PROMPT",
+  "the submenu carries a Repel prompt row")
+T.eq(easySub.rows[3].value(game), "ON", "Repel prompt defaults on")
 
 press(easySub, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_cut_grass, true,
@@ -220,6 +225,16 @@ T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
 press(easySub, "right")
 T.eq(game.save.options.modOptions.quality_of_life.qol_water_interaction,
   "fish_first", "Water Interaction wraps back to fish first")
+
+easySub.index = 3
+press(easySub, "right")
+T.eq(game.save.options.modOptions.quality_of_life.qol_repel_prompt, false,
+  "right turns the Repel prompt off")
+T.eq(easySub.rows[3].value(game), "OFF", "submenu refreshes the Repel prompt")
+press(easySub, "left")
+T.eq(game.save.options.modOptions.quality_of_life.qol_repel_prompt, true,
+  "left turns the Repel prompt back on")
+easySub.index = 1
 
 press(easySub, "b")
 T.eq(game.stack:top(), menu,
@@ -455,12 +470,103 @@ whiteFlash.onDone()
 T.eq(overworld.dark, false, "FLASH lights the current dark map after the flash")
 T.eq(darkChanges, 1, "FLASH invalidates dark map and sprite palettes")
 
+fieldMoveMons.DIG, fieldMoveMons.FLASH = nil, nil
+local repelName = Data.items.REPEL.name
+local maxRepelName = Data.items.MAX_REPEL.name
+game.save.inventory.SUPER_REPEL = 1
+game.save.inventory.REPEL = 2
+input.pressed = { select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+fieldMenu = worldStack:top()
+T.eq(fieldMenu.items[1].label, repelName,
+  "SELECT offers the weakest held REPEL")
+T.eq(fieldMenu.items[2].label, "CANCEL", "the repel popup ends with CANCEL")
+press(fieldMenu, "a")
+T.eq(game.save.repelSteps, 100, "the SELECT repel applies its own step count")
+T.eq(game.save.inventory.REPEL, 1, "using a repel consumes one from the bag")
+T.eq(game.save.inventory.SUPER_REPEL, 1, "the stronger repel is left alone")
+local usedBox = worldStack:pop()
+T.check(usedBox and usedBox.pages
+        and table.concat(usedBox.pages[1], " "):find(repelName, 1, true),
+  "using a repel shows the bag's used-item text")
+
+game.save.inventory.REPEL = nil
+game.save.inventory.SUPER_REPEL = nil
+game.save.inventory.MAX_REPEL = 1
+input.pressed = { select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+fieldMenu = worldStack:top()
+T.eq(fieldMenu.items[1].label, maxRepelName,
+  "SELECT falls back to the only repel held")
+press(fieldMenu, "a")
+T.eq(game.save.repelSteps, 250, "MAX REPEL applies its longer step count")
+T.eq(game.save.inventory.MAX_REPEL, nil, "the last repel clears its bag slot")
+worldStack:pop()
+
+input.pressed = { select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+T.eq(worldStack:top(), overworld,
+  "SELECT opens nothing without field moves or repels")
+
+local stepHook = OverworldController.__qolStepHooks.quality_of_life
+T.check(stepHook and stepHook.before and stepHook.after,
+  "installs a repel step hook on the overworld controller")
+local RealTextBox = require("src.render.TextBox")
+local function wearOffBox()
+  local box = RealTextBox.new(worldGame, "REPEL's effect\nwore off.")
+  worldStack:push(box)
+  stepHook.after(overworld, 1)
+  return box
+end
+
+game.save.inventory.REPEL = 1
+game.save.repelSteps = 1
+T.eq(stepHook.before(overworld), 1, "the step hook snapshots the repel counter")
+game.save.repelSteps = 0
+local wearOff = wearOffBox()
+T.eq(worldStack:top(), wearOff,
+  "the prompt waits behind the wear-off message")
+worldStack:pop()
+wearOff.onDone()
+local prompt = worldStack:pop()
+T.check(prompt and prompt.choice,
+  "the wear-off message chains a YES/NO prompt")
+prompt.choice(false)
+T.eq(game.save.repelSteps, 0, "declining the prompt uses no repel")
+T.eq(game.save.inventory.REPEL, 1, "declining the prompt keeps the repel")
+
+local wearOff2 = wearOffBox()
+worldStack:pop()
+wearOff2.onDone()
+local prompt2 = worldStack:pop()
+prompt2.choice(true)
+T.eq(game.save.repelSteps, 100, "accepting the prompt applies the next repel")
+T.eq(game.save.inventory.REPEL, nil, "accepting the prompt consumes it")
+worldStack:pop()
+
+game.save.inventory.REPEL = 1
+game.save.repelSteps = 0
+game.save.options.modOptions.quality_of_life.qol_repel_prompt = false
+local silent = wearOffBox()
+T.eq(silent.onDone, nil, "the prompt stays silent while the option is off")
+worldStack:pop()
+game.save.options.modOptions.quality_of_life.qol_repel_prompt = true
+
+game.save.inventory.REPEL = nil
+local empty = wearOffBox()
+T.eq(empty.onDone, nil, "no prompt once the bag holds no repel")
+worldStack:pop()
+game.save.repelSteps = nil
+
 menu.index = 2
 press(menu, "a")
 local description = game.stack:top()
 T.check(description ~= menu and description.pages,
   "A opens the selected setting description")
-T.check(#description.pages == 3 and #description.pages[1] == 2,
+T.check(#description.pages == 2 and #description.pages[1] == 2,
   "setting descriptions pause after the first two lines")
 game.stack:pop()
 
