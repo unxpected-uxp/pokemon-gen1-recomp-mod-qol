@@ -20,6 +20,7 @@ local modFiles = {}
 for _, name in ipairs({
   "manifest.json",
   "main.lua",
+  "qol_generation.lua",
   "qol_options.lua",
   "qol_battle_overlays.lua",
   "qol_feature_xp_bar.lua",

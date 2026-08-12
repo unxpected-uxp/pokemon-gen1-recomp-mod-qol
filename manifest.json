@@ -4,6 +4,7 @@
   "version": "1.2.7",
   "github": "unxpected-uxp/pokemon-gen1-recomp-mod-qol",
   "api": 2,
+  "games": ["gen1", "gen2"],
   "entry": "main.lua",
   "profile": "content",
   "category": "UI",

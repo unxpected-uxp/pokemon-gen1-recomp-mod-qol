@@ -28,6 +28,9 @@ local EXP_BURST_TILE_ROWS = {
 }
 
 local feature = {
+  -- Gold draws its own XP bar in the player HUD; this whole file is the
+  -- Gen 1 substitute for one that already exists there.
+  games = { "gen1" },
   option = {
     key = "qol_exp_bar",
     label = "XP BAR",

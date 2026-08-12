@@ -1,8 +1,13 @@
 local SCREEN_ID = "QualityOfLife"
+local GEN2_VISIBLE_ROWS = 7
+-- Gold's OptionsMenu value column is 11; this submenu's values are longer, so
+-- they start seven glyphs earlier and the colon sits one before that.
+local GEN2_VALUE_TX = 4
 
 local M = {}
 
-function M.install(mod, features)
+function M.install(mod, features, generation)
+  local isGen2 = generation and generation.value == 2
   local schema = {}
   local modes = {}
   local aliases = {}
@@ -61,7 +66,12 @@ function M.install(mod, features)
 
     -- Keep mod.options:get synchronized until options.lua is reloaded.
     if game.mods then optionBucket(game.mods)[key] = value end
-    if game.writeOptions then game:writeOptions() end
+    -- Gold's Game2 spells this persistOptions rather than writeOptions.
+    if game.writeOptions then
+      game:writeOptions()
+    elseif game.persistOptions then
+      game:persistOptions()
+    end
   end
 
   local function modeIndex(game, key)
@@ -83,7 +93,6 @@ function M.install(mod, features)
 
   local function makeScreenFactory(screenFeatures, currentScreenId)
     return function(game)
-      local OptionRows = require("src.ui.OptionRows")
       local rows = {}
       for _, feature in ipairs(screenFeatures) do
         local menu = feature.menu
@@ -166,11 +175,56 @@ function M.install(mod, features)
         elseif input:wasPressed("b") then
           self.game.stack:pop()
         end
-        self.scroll = OptionRows.clampScroll(
-          self.index, self.scroll, #self.rows, nil)
+        if isGen2 then
+          if self.index <= self.scroll then
+            self.scroll = self.index - 1
+          elseif self.index > self.scroll + GEN2_VISIBLE_ROWS then
+            self.scroll = self.index - GEN2_VISIBLE_ROWS
+          end
+          self.scroll = math.max(0, math.min(self.scroll,
+            math.max(0, #self.rows - GEN2_VISIBLE_ROWS)))
+        else
+          local OptionRows = require("src.ui.OptionRows")
+          self.scroll = OptionRows.clampScroll(
+            self.index, self.scroll, #self.rows, nil)
+        end
       end
 
-      function screen:draw()
+      -- Gold's own OPTION screen is one full-height textbox with the row
+      -- window scrolling inside it (src/ui/gen2/OptionsMenu.lua); mirrored
+      -- here with src.ui.gen2.Chrome rather than Red's four-box OptionRows,
+      -- which requiring on Gold would silently hand back the Gen 1 module
+      -- and paint Red's chrome over Gold's screen.
+      local function drawGen2(self)
+        local Chrome = require("src.ui.gen2.Chrome")
+        Chrome.textbox(0, 0, Chrome.SCREEN_W - 2, Chrome.SCREEN_H - 2)
+        for slot = 1, math.min(GEN2_VISIBLE_ROWS, #self.rows) do
+          local i = slot + self.scroll
+          local row = self.rows[i]
+          if row then
+            local labelY = 2 + (slot - 1) * 2
+            Chrome.print(row.label, 2, labelY)
+            -- Gold's own OPTION screen puts the value column at 10/11, which
+            -- suits its short values (ON, FAST, STEREO). This mod's are long
+            -- enough to run off the box there ("ON (2 SECONDS)"), so its rows
+            -- sit seven glyphs further left -- inside this submenu only, never
+            -- on the engine's screen.
+            Chrome.print(":", GEN2_VALUE_TX - 1, labelY + 1)
+            Chrome.print(row.value and row.value(self.game) or "",
+              GEN2_VALUE_TX, labelY + 1)
+          end
+        end
+        Chrome.cursor(1, 2 + (self.index - self.scroll - 1) * 2)
+        if self.scroll + GEN2_VISIBLE_ROWS < #self.rows then
+          local Font = require("src.render.Font")
+          love.graphics.setColor(0, 0, 0, 1)
+          Font.drawCode(Chrome.DOWN_ARROW, 8, (2 + GEN2_VISIBLE_ROWS * 2 - 1) * 8)
+          love.graphics.setColor(1, 1, 1, 1)
+        end
+      end
+
+      local function drawGen1(self)
+        local OptionRows = require("src.ui.OptionRows")
         local Font = require("src.render.Font")
         local row = self.rows[self.index]
         local configurable = row.activate ~= nil
@@ -181,6 +235,8 @@ function M.install(mod, features)
         Font.draw(footer, 8, 136)
         love.graphics.setColor(1, 1, 1, 1)
       end
+
+      screen.draw = isGen2 and drawGen2 or drawGen1
 
       return screen
     end
@@ -222,10 +278,13 @@ function M.install(mod, features)
     routes[mod.id] = SCREEN_ID
   end)
 
+  -- Gold's OPTION screen has no MODS row; CANCEL is its last row, the way
+  -- MODS is Gen 1's.
+  local menuAnchor = isGen2 and "CANCEL" or "MODS"
   mod.hooks:wrap("ui.options.rows", function(next, game, rows)
     local out = next(game, rows)
     if type(out) ~= "table" then return out end
-    return mod.ui.insertBefore(out, "MODS", {
+    return mod.ui.insertBefore(out, menuAnchor, {
       id = "qol_later_gen",
       label = "QUALITY OF LIFE",
       value = function() return "CONFIGURE" end,
