@@ -136,7 +136,8 @@ function M.install(mod, features, generation)
 
       local screen = {
         screenId = currentScreenId,
-        game = game,
+        isModOptions = true,
+		game = game,
         rows = rows,
         index = 1,
         scroll = 0,
