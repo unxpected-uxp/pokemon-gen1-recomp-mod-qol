@@ -242,13 +242,19 @@ function M.install(mod, features, generation)
     end
   end
 
-  mod.content.screens:register(SCREEN_ID, { new = makeScreenFactory(features, SCREEN_ID) })
+  -- isModOptions (engine #1697): Screens.build stamps it onto instances so
+  -- other UI mods can detect mod options screens without screenId matching.
+  mod.content.screens:register(SCREEN_ID, {
+    new = makeScreenFactory(features, SCREEN_ID),
+    isModOptions = true,
+  })
 
   local function registerScreens(featureList)
     for _, feature in ipairs(featureList) do
       if feature.isSubmenu and feature.screenId then
         mod.content.screens:register(feature.screenId, {
-          new = makeScreenFactory(feature.subfeatures, feature.screenId)
+          new = makeScreenFactory(feature.subfeatures, feature.screenId),
+          isModOptions = true,
         })
         if feature.subfeatures then
           registerScreens(feature.subfeatures)

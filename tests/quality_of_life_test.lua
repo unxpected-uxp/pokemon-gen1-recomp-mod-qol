@@ -80,6 +80,8 @@ T.eq(rows[3].label, "MODS", "preserves the base options row")
 rows[2].activate(game)
 local menu = game.stack:top()
 T.check(menu and menu.screenId == exports.screenId, "opens the custom submenu")
+T.check(menu.isModOptions == true,
+  "options screen carries the isModOptions marker")
 T.eq(menu.rows[1].value(game), "OFF", "EXP bar defaults off")
 T.eq(menu.rows[2].value(game), "OFF", "indicator defaults off")
 T.eq(menu.rows[3].value(game), "OFF", "Location banners default off")

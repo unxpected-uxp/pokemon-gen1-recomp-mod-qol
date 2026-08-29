@@ -107,6 +107,8 @@ T.eq(rows[3].label, "CANCEL", "preserves the CANCEL row")
 rows[2].activate(game)
 local menu = game.stack:top()
 T.check(menu and menu.screenId == exports.screenId, "opens the custom submenu")
+T.check(menu.isModOptions == true,
+  "options screen carries the isModOptions marker")
 T.eq(#menu.rows, 3, "menu drops XP BAR but keeps the ported features")
 T.eq(menu.rows[1].label, "POKéDEX INDICATOR", "keeps the caught indicator row")
 T.eq(menu.rows[2].label, "LOCATION BANNERS", "keeps the location banners row")
@@ -126,6 +128,8 @@ press(menu, "a")
 local easySub = game.stack:top()
 T.check(easySub and easySub.screenId == "EasyInteractions" and easySub ~= menu,
   "A opens the easy interactions submenu")
+T.check(easySub.isModOptions == true,
+  "submenu screen carries the isModOptions marker")
 -- CUT GRASS is absent: Gold's own CUTTABLE set already carries tall and long
 -- grass, so its native A press cuts grass and the option has nothing to do.
 T.eq(#easySub.rows, 2, "Gold's submenu drops CUT GRASS and keeps the rest")
