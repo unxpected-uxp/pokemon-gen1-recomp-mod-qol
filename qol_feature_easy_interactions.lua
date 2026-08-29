@@ -188,6 +188,28 @@ local function installGen1(mod, services)
     return true
   end
 
+  local function useBicycle(game)
+    local ow = mod.world:overworld()
+    if not ow then return end
+    local TextBox = require("src.render.TextBox")
+    if game.save.forcedBike then
+      game.stack:push(TextBox.new(game, Strings("You can't get off\nhere.")))
+      return
+    end
+    local Music = require("src.core.Music")
+    if game.save.onBike then
+      game.save.onBike = false
+      Music.playMap(game.data, ow.map and ow.map.id, false)
+      game.stack:push(TextBox.new(game, Strings("{PLAYER} got off\nthe BICYCLE.")))
+    elseif ow:bikeAllowed(ow.map and ow.map.id) then
+      game.save.onBike = true
+      Music.playMap(game.data, ow.map and ow.map.id, true)
+      game.stack:push(TextBox.new(game, Strings("{PLAYER} got on\nthe BICYCLE!")))
+    else
+      game.stack:push(TextBox.new(game, Strings("No cycling\nallowed here.")))
+    end
+  end
+
   local function useSurfFacing(ow)
     local fx, fy = ow.player:facingCell()
     ow:trySurf(fx, fy)
@@ -303,6 +325,12 @@ local function installGen1(mod, services)
        and ow:partyKnows("DIG") then
       items[#items + 1] = { label = "DIG", onSelect = function()
         ow:beginTeleportOut()
+      end }
+    end
+    if type(game.save.inventory.BICYCLE) == "number"
+       and game.save.inventory.BICYCLE > 0 then
+      items[#items + 1] = { label = itemName(game, "BICYCLE"), onSelect = function()
+        useBicycle(game)
       end }
     end
     -- vanilla lets a repel overwrite an active one, so this stays offered
@@ -461,7 +489,7 @@ local function installGen1(mod, services)
   end)
 end
 
--- Gold's arm. Only the held-START menu, and only its REPEL entry.
+-- Gold's held-START field menu arm.
 local function installGen2(mod, services)
   local StartMenu = require("src.ui.gen2.StartMenu")
   local Strings = require("src.core.Strings")
@@ -494,6 +522,11 @@ local function installGen2(mod, services)
         return repel
       end
     end
+  end
+
+  local function bicycleOwned(game)
+    local inventory = game and game.save and game.save.inventory or {}
+    return type(inventory.BICYCLE) == "number" and inventory.BICYCLE > 0
   end
 
   -- World:useRepel owns the step count, the already-in-effect refusal AND the
@@ -572,6 +605,11 @@ local function installGen2(mod, services)
       end
     end
 
+    if bicycleOwned(game) then
+      items[#items + 1] = { label = itemName(game, "BICYCLE"), onSelect = function()
+        world:useFieldItem("BICYCLE")
+      end }
+    end
     local repel = repelItem(game)
     if repel then
       items[#items + 1] = { label = itemName(game, repel),

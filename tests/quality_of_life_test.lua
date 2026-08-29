@@ -97,6 +97,7 @@ local overworld = {
   map = { id = "PALLET_TOWN", def = { tileset = "OVERWORLD" },
           isGrassCell = function() return false end },
   player = { facingCell = function() return 7, 8 end },
+  bikeAllowed = function() return true end,
   useCutFieldMove = function()
     fieldChecks = fieldChecks + 1
     return fieldResult
@@ -417,19 +418,32 @@ end
 
 fieldMoveMons.FLY = { species = "PIDGEOT" }
 fieldMoveMons.TELEPORT = { species = "ABRA" }
+game.save.inventory.BICYCLE = 1
 input.pressed = { select = true }
 OverworldController.handleInput(overworld)
 input.pressed = {}
 local fieldMenu = worldStack:top()
 T.eq(fieldMenu.items[1].label, "FLY", "SELECT offers FLY outdoors")
 T.eq(fieldMenu.items[2].label, "TELEPORT", "SELECT offers TELEPORT outdoors")
-T.eq(fieldMenu.items[3].label, "CANCEL", "the outdoor popup ends with CANCEL")
-T.eq(fieldMenu.ty, 10, "the outdoor popup is anchored to the bottom")
+T.eq(fieldMenu.items[3].label, "BICYCLE", "SELECT offers the owned BICYCLE outdoors")
+T.eq(fieldMenu.items[4].label, "CANCEL", "the outdoor popup ends with CANCEL")
+T.eq(fieldMenu.ty, 8, "the outdoor popup is anchored to the bottom")
 press(fieldMenu, "a")
 T.eq(pushedScreen, "TownMap", "FLY opens the normal Town Map")
 pushedOpts.onFly("CERULEAN_CITY")
 T.eq(flyDest, "CERULEAN_CITY", "the Town Map selection invokes FLY")
 Screens.push = oldScreensPush
+
+input.pressed = { select = true }
+OverworldController.handleInput(overworld)
+input.pressed = {}
+fieldMenu = worldStack:top()
+press(fieldMenu, "down")
+press(fieldMenu, "down")
+press(fieldMenu, "a")
+T.eq(game.save.onBike, true, "choosing BICYCLE mounts the player")
+worldStack:pop()
+game.save.inventory.BICYCLE = nil
 
 input.pressed = { select = true }
 OverworldController.handleInput(overworld)

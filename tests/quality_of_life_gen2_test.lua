@@ -263,7 +263,7 @@ local heldInput = {
   isDown = function(_, key) return held.down[key] or false end,
   wasPressed = function(_, key) return held.pressed[key] or false end,
 }
-local repelCalls, fieldMoveCalls, rodCalls, surfCalls = {}, {}, {}, {}
+local repelCalls, fieldMoveCalls, rodCalls, surfCalls, itemCalls = {}, {}, {}, {}, {}
 local worldStub
 -- Every Johto badge, so FieldMoves' own badge gate passes and what the tests
 -- are actually varying is the situation.
@@ -281,6 +281,10 @@ worldStub = {
   useRepel = function(_, itemId)
     repelCalls[#repelCalls + 1] = itemId
     return worldStub.outcome or "repel_used"
+  end,
+  useFieldItem = function(_, itemId)
+    itemCalls[#itemCalls + 1] = itemId
+    return "bike_on"
   end,
   -- The shape World:fieldContext really returns, so the menu runs against the
   -- engine's own FieldMoves.fromMenu gating rather than a stand-in for it.
@@ -473,6 +477,17 @@ worldStub.dark, worldStub.environment, worldStub.canEscapeRope =
   false, "TOWN", false
 T.eq(menuLabels(openMenuNow()), "FLY,TELEPORT,REPEL,CANCEL",
   "a lit town offers FLY and TELEPORT but neither FLASH nor DIG")
+
+fieldGame.save.inventory.BICYCLE = 1
+local bicycleMenu = openMenuNow()
+T.eq(menuLabels(bicycleMenu), "FLY,TELEPORT,BICYCLE,REPEL,CANCEL",
+  "Gold offers the owned BICYCLE in the field menu")
+bicycleMenu.index = 3
+held.pressed = { a = true }
+bicycleMenu:update(1 / 60)
+held.pressed = {}
+T.eq(itemCalls[1], "BICYCLE", "choosing BICYCLE uses the field item")
+fieldGame.save.inventory.BICYCLE = nil
 
 -- A dark cave flips every one of them: FLASH and DIG become usable, FLY and
 -- TELEPORT do not work indoors.
